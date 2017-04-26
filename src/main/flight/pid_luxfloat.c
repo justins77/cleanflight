@@ -184,7 +184,7 @@ void pidLuxFloat(const pidProfile_t *pidProfile, const controlRateConfig_t *cont
                 pidProfile->horizon_tilt_mode, pidProfile->D8[PIDLEVEL]) / 100.0f;
     }
 
-    justinGainScale = constrain(rcData[AUX4] * JUSTIN_SCALE_FACTOR + JUSTIN_SCALE_OFFSET, JUSTIN_SCALE_MIN, JUSTIN_SCALE_MAX);
+    justinGainScale = constrainf(rcData[AUX4] * JUSTIN_SCALE_FACTOR + JUSTIN_SCALE_OFFSET, JUSTIN_SCALE_MIN, JUSTIN_SCALE_MAX);
 
     // ----------PID controller----------
     for (int axis = 0; axis < 3; axis++) {
