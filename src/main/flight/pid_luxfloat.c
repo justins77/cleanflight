@@ -77,6 +77,18 @@ static const float luxITermScale = 1000000.0f / 0x1000000;
 static const float luxDTermScale = (0.000001f * (float)0xFFFF) / 512;
 static const float luxGyroScale = 16.4f / 4; // the 16.4 is needed because mwrewrite does not scale according to the gyro model gyro.scale
 
+#define JUSTIN_PWM_MIN 1100.0f
+#define JUSTIN_PWM_MAX 1900.0f
+#define JUSTIN_SCALE_MIN 0.1f
+#define JUSTIN_SCALE_MAX 1.0f
+
+#define JUSTIN_SCALE_FACTOR_EXPR ((JUSTIN_SCALE_MAX - JUSTIN_SCALE_MIN) / (JUSTIN_PWM_MAX - JUSTIN_PWM_MIN))
+
+static const float JUSTIN_SCALE_FACTOR = JUSTIN_SCALE_FACTOR_EXPR;
+static const float JUSTIN_SCALE_OFFSET = -JUSTIN_PWM_MIN * JUSTIN_SCALE_FACTOR_EXPR + JUSTIN_SCALE_MIN;
+
+static float justinGainScale = 1.0f;
+
 STATIC_UNIT_TESTED int16_t pidLuxFloatCore(int axis, const pidProfile_t *pidProfile, float gyroRate, float angleRate)
 {
     static float lastRateForDelta[3];
@@ -87,6 +99,11 @@ STATIC_UNIT_TESTED int16_t pidLuxFloatCore(int axis, const pidProfile_t *pidProf
 
     // -----calculate P component
     float PTerm = luxPTermScale * rateError * pidProfile->P8[axis] * PIDweight[axis] / 100;
+
+    if (axis != ROLL) {
+      PTerm *= justinGainScale;
+    }
+
     // Constrain YAW by yaw_p_limit value if not servo driven, in that case servolimits apply
     if (axis == YAW) {
         if (pidProfile->yaw_lpf_hz) {
@@ -167,6 +184,8 @@ void pidLuxFloat(const pidProfile_t *pidProfile, const controlRateConfig_t *cont
                 pidProfile->horizon_tilt_mode, pidProfile->D8[PIDLEVEL]) / 100.0f;
     }
 
+    justinGainScale = constrain(rcData[AUX4] * JUSTIN_SCALE_FACTOR + JUSTIN_SCALE_OFFSET, JUSTIN_SCALE_MIN, JUSTIN_SCALE_MAX);
+
     // ----------PID controller----------
     for (int axis = 0; axis < 3; axis++) {
         const uint8_t rate = controlRateConfig->rates[axis];
@@ -201,6 +220,10 @@ void pidLuxFloat(const pidProfile_t *pidProfile, const controlRateConfig_t *cont
             }
         }
 
+        if (axis != ROLL) {
+          angleRate /= justinGainScale;
+        }
+
         // --------low-level gyro-based PID. ----------
         const float gyroRate = luxGyroScale * gyroADCf[axis] * gyro.scale;
         axisPID[axis] = pidLuxFloatCore(axis, pidProfile, gyroRate, angleRate);
@@ -214,4 +237,3 @@ void pidLuxFloat(const pidProfile_t *pidProfile, const controlRateConfig_t *cont
 }
 
 #endif
-
