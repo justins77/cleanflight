@@ -77,15 +77,25 @@ static const float luxITermScale = 1000000.0f / 0x1000000;
 static const float luxDTermScale = (0.000001f * (float)0xFFFF) / 512;
 static const float luxGyroScale = 16.4f / 4; // the 16.4 is needed because mwrewrite does not scale according to the gyro model gyro.scale
 
-#define JUSTIN_PWM_MIN 1100.0f
-#define JUSTIN_PWM_MAX 1900.0f
-#define JUSTIN_SCALE_MIN 0.1f
-#define JUSTIN_SCALE_MAX 1.0f
+#define JUSTIN1_PWM_MIN 1100.0f
+#define JUSTIN1_PWM_MAX 1500.0f
+#define JUSTIN1_SCALE_MIN 0.01f
+#define JUSTIN1_SCALE_MAX 0.10f
 
-#define JUSTIN_SCALE_FACTOR_EXPR ((JUSTIN_SCALE_MAX - JUSTIN_SCALE_MIN) / (JUSTIN_PWM_MAX - JUSTIN_PWM_MIN))
+#define JUSTIN1_SCALE_FACTOR_EXPR ((JUSTIN1_SCALE_MAX - JUSTIN1_SCALE_MIN) / (JUSTIN1_PWM_MAX - JUSTIN1_PWM_MIN))
 
-static const float JUSTIN_SCALE_FACTOR = JUSTIN_SCALE_FACTOR_EXPR;
-static const float JUSTIN_SCALE_OFFSET = -JUSTIN_PWM_MIN * JUSTIN_SCALE_FACTOR_EXPR + JUSTIN_SCALE_MIN;
+static const float JUSTIN1_SCALE_FACTOR = JUSTIN1_SCALE_FACTOR_EXPR;
+static const float JUSTIN1_SCALE_OFFSET = -JUSTIN1_PWM_MIN * JUSTIN1_SCALE_FACTOR_EXPR + JUSTIN1_SCALE_MIN;
+
+#define JUSTIN2_PWM_MIN 1500.0f
+#define JUSTIN2_PWM_MAX 1900.0f
+#define JUSTIN2_SCALE_MIN 0.1f
+#define JUSTIN2_SCALE_MAX 1.0f
+
+#define JUSTIN2_SCALE_FACTOR_EXPR ((JUSTIN2_SCALE_MAX - JUSTIN2_SCALE_MIN) / (JUSTIN2_PWM_MAX - JUSTIN2_PWM_MIN))
+
+static const float JUSTIN2_SCALE_FACTOR = JUSTIN2_SCALE_FACTOR_EXPR;
+static const float JUSTIN2_SCALE_OFFSET = -JUSTIN2_PWM_MIN * JUSTIN2_SCALE_FACTOR_EXPR + JUSTIN2_SCALE_MIN;
 
 static float justinGainScale = 1.0f;
 
@@ -184,7 +194,16 @@ void pidLuxFloat(const pidProfile_t *pidProfile, const controlRateConfig_t *cont
                 pidProfile->horizon_tilt_mode, pidProfile->D8[PIDLEVEL]) / 100.0f;
     }
 
-    justinGainScale = constrainf(rcData[AUX4] * JUSTIN_SCALE_FACTOR + JUSTIN_SCALE_OFFSET, JUSTIN_SCALE_MIN, JUSTIN_SCALE_MAX);
+    if (FLIGHT_MODE(ANGLE_MODE)) {
+      justinGainScale = 1.0f;
+    } else {
+      int rcValue = rcData[AUX4];
+      if (rcValue < JUSTIN1_PWM_MAX) {
+        justinGainScale = constrainf(rcValue * JUSTIN1_SCALE_FACTOR + JUSTIN1_SCALE_OFFSET, JUSTIN1_SCALE_MIN, JUSTIN1_SCALE_MAX);
+      } else {
+        justinGainScale = constrainf(rcValue * JUSTIN2_SCALE_FACTOR + JUSTIN2_SCALE_OFFSET, JUSTIN2_SCALE_MIN, JUSTIN2_SCALE_MAX);
+      }
+    }
 
     // ----------PID controller----------
     for (int axis = 0; axis < 3; axis++) {
