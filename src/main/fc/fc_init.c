@@ -110,6 +110,7 @@
 #include "rx/spektrum.h"
 
 #include "io/beeper.h"
+#include "io/controller_sync.h"
 #include "io/displayport_max7456.h"
 #include "io/displayport_srxl.h"
 #include "io/serial.h"
@@ -607,6 +608,8 @@ void init(void)
     }
 #endif
 
+    controllerSyncInit();
+    
 #ifdef USE_LED_STRIP
     ledStripInit();
 

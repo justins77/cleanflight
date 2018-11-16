@@ -43,6 +43,8 @@
 #include "drivers/serial_uart.h"
 #include "drivers/serial_uart_impl.h"
 
+#include "io/debug_console.h"
+
 static void usartConfigurePinInversion(uartPort_t *uartPort) {
     bool inverted = uartPort->port.options & SERIAL_INVERTED;
 
@@ -123,7 +125,11 @@ void uartReconfigure(uartPort_t *uartPort)
             uartPort->rxDMAHandle.Init.MemInc = DMA_MINC_ENABLE;
             uartPort->rxDMAHandle.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
             uartPort->rxDMAHandle.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
+
+	    // TODO(justin): we may not want this to be circular; we might want to explicitly
+	    // read from a rotating list of buffers so we can get precise timing on each packet.
             uartPort->rxDMAHandle.Init.Mode = DMA_CIRCULAR;
+
             uartPort->rxDMAHandle.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
             uartPort->rxDMAHandle.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_1QUARTERFULL;
             uartPort->rxDMAHandle.Init.PeriphBurst = DMA_PBURST_SINGLE;
@@ -131,12 +137,18 @@ void uartReconfigure(uartPort_t *uartPort)
             uartPort->rxDMAHandle.Init.Priority = DMA_PRIORITY_MEDIUM;
 
 
-            HAL_DMA_DeInit(&uartPort->rxDMAHandle);
-            HAL_DMA_Init(&uartPort->rxDMAHandle);
+            int r2 = HAL_DMA_DeInit(&uartPort->rxDMAHandle);
+	    debugPrintVar("r2 ", r2);
+            int r3 = HAL_DMA_Init(&uartPort->rxDMAHandle);
+	    debugPrintVar("r3 ", r3);
             /* Associate the initialized DMA handle to the UART handle */
             __HAL_LINKDMA(&uartPort->Handle, hdmarx, uartPort->rxDMAHandle);
 
-            HAL_UART_Receive_DMA(&uartPort->Handle, (uint8_t*)uartPort->port.rxBuffer, uartPort->port.rxBufferSize);
+	    debugPrintVar("starting DMA rx ", (int)uartPort);
+	    debugPrintVar("CR ", uartPort->Handle.hdmarx->Instance->CR);
+            int result = HAL_UART_Receive_DMA(&uartPort->Handle, (uint8_t*)uartPort->port.rxBuffer, uartPort->port.rxBufferSize);
+	    debugPrintVar("result ", (int)result);
+	    debugPrintVar("CR ", uartPort->Handle.hdmarx->Instance->CR);
 
             uartPort->rxDMAPos = __HAL_DMA_GET_COUNTER(&uartPort->rxDMAHandle);
 
@@ -190,6 +202,11 @@ void uartReconfigure(uartPort_t *uartPort)
     }
     return;
 }
+
+int rx_cplt_count = 0;
+//void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+//  rx_cplt_count++;
+//}
 
 serialPort_t *uartOpen(UARTDevice_e device, serialReceiveCallbackPtr callback, void *callbackData, uint32_t baudRate, portMode_e mode, portOptions_e options)
 {
@@ -258,6 +275,18 @@ uint32_t uartTotalRxBytesWaiting(const serialPort_t *instance)
 
     if (s->rxDMAStream) {
         uint32_t rxDMAHead = __HAL_DMA_GET_COUNTER(s->Handle.hdmarx);
+
+	static int downsample = 0;
+	if (downsample++ >= 1000) {
+	  downsample = 0;
+	  debugPrintVar("rxDMAHead ", rxDMAHead);
+	  debugPrintVar("hdmarx->State ", s->Handle.hdmarx->State);
+	  debugPrintVar("ErrorCode ", s->Handle.ErrorCode);
+	  debugPrintVar("RxState ", s->Handle.RxState);
+	  debugPrintVar("RxXferSize ", s->Handle.RxXferSize);
+	  debugPrintVar("CR: ", s->Handle.hdmarx->Instance->CR);
+	  //s->Handle.hdmarx->Instance->CR |= 1;
+	}
 
         if (rxDMAHead >= s->rxDMAPos) {
             return rxDMAHead - s->rxDMAPos;

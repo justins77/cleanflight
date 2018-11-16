@@ -52,6 +52,7 @@
 #endif
 
 #include "io/serial.h"
+#include "io/debug_console.h"
 
 #include "interface/cli.h"
 
@@ -124,6 +125,7 @@ void pgResetFn_serialConfig(serialConfig_t *serialConfig)
 
     serialConfig->portConfigs[0].functionMask = FUNCTION_MSP;
 
+    
 #ifdef SERIALRX_UART
     serialPortConfig_t *serialRxUartConfig = serialFindPortConfiguration(SERIALRX_UART);
     if (serialRxUartConfig) {
@@ -352,6 +354,12 @@ serialPort_t *openSerialPort(
 #endif
 
     serialPortUsage_t *serialPortUsage = findSerialPortUsageByIdentifier(identifier);
+
+    debugPrintVar("serialPortUsage: ", (int)serialPortUsage);
+    if (serialPortUsage) {
+      debugPrintVar("serialPortUsage->function: ", serialPortUsage->function);
+    }
+    
     if (!serialPortUsage || serialPortUsage->function != FUNCTION_NONE) {
         // not available / already in use
         return NULL;

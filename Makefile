@@ -16,7 +16,7 @@
 #
 
 # The target to build, see VALID_TARGETS below
-TARGET    ?= SPRACINGF3NEO
+TARGET    ?= SPRACINGF7DUAL
 
 # Compile-time options
 OPTIONS   ?=

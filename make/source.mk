@@ -146,6 +146,8 @@ FC_SRC = \
             io/rcdevice_cam.c \
             io/rcdevice.c \
             io/gps.c \
+            io/controller_sync.c \
+            io/debug_console.c \
             io/ledstrip.c \
             io/osd.c \
             io/pidaudio.c \
