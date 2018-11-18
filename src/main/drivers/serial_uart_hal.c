@@ -65,6 +65,9 @@ static void usartConfigurePinInversion(uartPort_t *uartPort) {
 
 // XXX uartReconfigure does not handle resource management properly.
 
+// SUPER HACK - just for testing callbacks
+uartPort_t* tmpDmaUartPort = NULL;
+
 void uartReconfigure(uartPort_t *uartPort)
 {
     /*RCC_PeriphCLKInitTypeDef RCC_PeriphClkInit;
@@ -129,7 +132,7 @@ void uartReconfigure(uartPort_t *uartPort)
 	    // TODO(justin): we may not want this to be circular; we might want to explicitly
 	    // read from a rotating list of buffers so we can get precise timing on each packet.
             //uartPort->rxDMAHandle.Init.Mode = DMA_CIRCULAR;
-            uartPort->rxDMAHandle.Init.Mode = DMA_CIRCULAR;
+            uartPort->rxDMAHandle.Init.Mode = DMA_NORMAL;
 
             uartPort->rxDMAHandle.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
             uartPort->rxDMAHandle.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_1QUARTERFULL;
@@ -147,6 +150,7 @@ void uartReconfigure(uartPort_t *uartPort)
 
 	    debugPrintVar("starting DMA rx ", (int)uartPort);
 	    debugPrintVarib("CR ", uartPort->Handle.hdmarx->Instance->CR);
+	    tmpDmaUartPort = uartPort;
             int result = HAL_UART_Receive_DMA(&uartPort->Handle, (uint8_t*)uartPort->port.rxBuffer, uartPort->port.rxBufferSize);
 	    debugPrintVar("result ", (int)result);
 	    debugPrintVarib("CR ", uartPort->Handle.hdmarx->Instance->CR);
@@ -209,6 +213,13 @@ void uartReconfigure(uartPort_t *uartPort)
         }
     }
     return;
+}
+
+int rx_cplt_count = 0;
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+  UNUSED(huart);
+  rx_cplt_count++;
+  HAL_UART_Receive_DMA(&tmpDmaUartPort->Handle, (uint8_t*)tmpDmaUartPort->port.rxBuffer, tmpDmaUartPort->port.rxBufferSize);
 }
 
 //int rx_cplt_count = 0;

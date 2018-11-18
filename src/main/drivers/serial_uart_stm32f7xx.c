@@ -343,7 +343,6 @@ void dmaIRQHandler(dmaChannelDescriptor_t* descriptor)
     HAL_DMA_IRQHandler(&s->txDMAHandle);
 }
 
-int rx_cplt_count = 0;
 void dmaRxIRQHandler(dmaChannelDescriptor_t* descriptor)
 {
     uartPort_t *s = &(((uartDevice_t*)(descriptor->userParam))->port);
@@ -351,10 +350,6 @@ void dmaRxIRQHandler(dmaChannelDescriptor_t* descriptor)
     //  rx_cplt_count++;
     //}
     HAL_DMA_IRQHandler(&s->rxDMAHandle);
-}
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-  rx_cplt_count++;
 }
 
 // XXX Should serialUART be consolidated?
