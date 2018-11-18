@@ -36,6 +36,12 @@ void debugPrinti(int x) {
   debugPrint(buffer);
 }
 
+void debugPrintib(uint32_t x) {
+  for (int i=31; i>=0; i--) {
+    addDebugChar(((x >> i) & 1) ? '1' : '0');
+  }
+}
+
 void debugPrintc(char ch) {
   addDebugChar(ch);
 }
@@ -49,5 +55,11 @@ void debugPrintx(uint8_t x) {
 void debugPrintVar(char* s, int x) {
   debugPrint(s);
   debugPrinti(x);
+  debugPrint("\r\n");
+}
+
+void debugPrintVarib(char* s, int x) {
+  debugPrint(s);
+  debugPrintib(x);
   debugPrint("\r\n");
 }

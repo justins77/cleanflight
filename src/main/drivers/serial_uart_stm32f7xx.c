@@ -88,10 +88,10 @@ const uartHardware_t uartHardware[UARTDEV_COUNT] = {
 #endif
         .rcc_apb1 = RCC_APB1(USART2),
         .txIrq = DMA1_ST6_HANDLER,
-        .rxIrq = USART2_IRQn,
-        //.rxIrq = DMA1_ST5_HANDLER,
+        //.rxIrq = USART2_IRQn,
+        .rxIrq = DMA1_ST5_HANDLER,
         .txPriority = NVIC_PRIO_SERIALUART2_TXDMA,
-        .rxPriority = NVIC_PRIO_SERIALUART2
+        .rxPriority = NVIC_PRIO_SERIALUART2_RXDMA
     },
 #endif
 
@@ -343,6 +343,14 @@ void dmaIRQHandler(dmaChannelDescriptor_t* descriptor)
     HAL_DMA_IRQHandler(&s->txDMAHandle);
 }
 
+int rx_cplt_count = 0;
+void dmaRxIRQHandler(dmaChannelDescriptor_t* descriptor)
+{
+  rx_cplt_count++;
+    uartPort_t *s = &(((uartDevice_t*)(descriptor->userParam))->port);
+    HAL_DMA_IRQHandler(&s->rxDMAHandle);
+}
+
 // XXX Should serialUART be consolidated?
 
 uartPort_t *serialUART(UARTDevice_e device, uint32_t baudRate, portMode_e mode, portOptions_e options)
@@ -370,6 +378,9 @@ uartPort_t *serialUART(UARTDevice_e device, uint32_t baudRate, portMode_e mode, 
     if (hardware->rxDMAStream) {
         s->rxDMAChannel = hardware->DMAChannel;
         s->rxDMAStream = hardware->rxDMAStream;
+	debugPrint("dmaInit for RX\r\n");
+	dmaInit(hardware->rxIrq, OWNER_SERIAL_RX, RESOURCE_INDEX(device));
+        dmaSetHandler(hardware->rxIrq, dmaRxIRQHandler, hardware->rxPriority, (uint32_t)uartdev);
     }
 
     if (hardware->txDMAStream) {
@@ -413,11 +424,9 @@ uartPort_t *serialUART(UARTDevice_e device, uint32_t baudRate, portMode_e mode, 
 
     if (s->rxDMAChannel) {
       //__HAL_RCC_DMA1_CLK_ENABLE();
-      //debugPrint("dmaInit for RX\r\n");
-      //dmaInit(hardware->rxIrq, OWNER_SERIAL_RX, RESOURCE_INDEX(device));
 
-      //  HAL_NVIC_SetPriority(hardware->rxIrq, NVIC_PRIORITY_BASE(hardware->rxPriority), NVIC_PRIORITY_SUB(hardware->rxPriority));
-      //  HAL_NVIC_EnableIRQ(hardware->rxIrq);
+        HAL_NVIC_SetPriority(hardware->rxIrq, NVIC_PRIORITY_BASE(hardware->rxPriority), NVIC_PRIORITY_SUB(hardware->rxPriority));
+        HAL_NVIC_EnableIRQ(hardware->rxIrq);
     } else {
         HAL_NVIC_SetPriority(hardware->rxIrq, NVIC_PRIORITY_BASE(hardware->rxPriority), NVIC_PRIORITY_SUB(hardware->rxPriority));
         HAL_NVIC_EnableIRQ(hardware->rxIrq);

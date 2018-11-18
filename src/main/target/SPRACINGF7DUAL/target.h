@@ -87,7 +87,7 @@
 #define USE_MAG
 #define USE_MAG_HMC5883
 
-//define USE_UART2_RX_DMA
+#define USE_UART2_RX_DMA
 //define USE_UART2_TX_DMA
 #define USE_VCP
 #define USE_UART1

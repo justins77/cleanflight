@@ -128,6 +128,7 @@ void uartReconfigure(uartPort_t *uartPort)
 
 	    // TODO(justin): we may not want this to be circular; we might want to explicitly
 	    // read from a rotating list of buffers so we can get precise timing on each packet.
+            //uartPort->rxDMAHandle.Init.Mode = DMA_CIRCULAR;
             uartPort->rxDMAHandle.Init.Mode = DMA_CIRCULAR;
 
             uartPort->rxDMAHandle.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
@@ -145,13 +146,20 @@ void uartReconfigure(uartPort_t *uartPort)
             __HAL_LINKDMA(&uartPort->Handle, hdmarx, uartPort->rxDMAHandle);
 
 	    debugPrintVar("starting DMA rx ", (int)uartPort);
-	    debugPrintVar("CR ", uartPort->Handle.hdmarx->Instance->CR);
+	    debugPrintVarib("CR ", uartPort->Handle.hdmarx->Instance->CR);
             int result = HAL_UART_Receive_DMA(&uartPort->Handle, (uint8_t*)uartPort->port.rxBuffer, uartPort->port.rxBufferSize);
 	    debugPrintVar("result ", (int)result);
-	    debugPrintVar("CR ", uartPort->Handle.hdmarx->Instance->CR);
+	    debugPrintVarib("CR ", uartPort->Handle.hdmarx->Instance->CR);
 
             uartPort->rxDMAPos = __HAL_DMA_GET_COUNTER(&uartPort->rxDMAHandle);
 
+	    // THIS IS THE KEY!
+	    HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+	    HAL_NVIC_EnableIRQ(USART2_IRQn);
+
+	    //SET_BIT(uartPort->USARTx->CR3, USART_CR3_DMAR);
+            //SET_BIT(uartPort->USARTx->CR1, USART_CR1_RXNEIE);
+            //SET_BIT(uartPort->USARTx->CR1, USART_CR1_TCIE);
         }
         else
         {
@@ -203,7 +211,7 @@ void uartReconfigure(uartPort_t *uartPort)
     return;
 }
 
-int rx_cplt_count = 0;
+//int rx_cplt_count = 0;
 //void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 //  rx_cplt_count++;
 //}
@@ -284,7 +292,12 @@ uint32_t uartTotalRxBytesWaiting(const serialPort_t *instance)
 	  debugPrintVar("ErrorCode ", s->Handle.ErrorCode);
 	  debugPrintVar("RxState ", s->Handle.RxState);
 	  debugPrintVar("RxXferSize ", s->Handle.RxXferSize);
-	  debugPrintVar("CR: ", s->Handle.hdmarx->Instance->CR);
+	  debugPrintVarib("DMA CR: ", s->Handle.hdmarx->Instance->CR);
+	  debugPrint(     "         3 2 2 2 2 2 1 1 1 1 1 0 0 0 0 0\r\n");
+	  debugPrint(     "         0 8 6 4 2 0 8 6 4 2 0 8 6 4 2 0\r\n");
+	  debugPrintVarib("CR1   : ", s->Handle.Instance->CR1);
+	  debugPrintVarib("CR2   : ", s->Handle.Instance->CR2);
+	  debugPrintVarib("CR3   : ", s->Handle.Instance->CR3);
 	  //s->Handle.hdmarx->Instance->CR |= 1;
 	}
 
