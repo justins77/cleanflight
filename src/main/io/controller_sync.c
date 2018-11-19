@@ -24,6 +24,11 @@ void controllerSyncInit() {
 			     MODE_RXTX,
 			     0);
   debugPrintVar("csyncPort: ", (int)csyncPort);
+
+  // send a few bytes to intentionally misalign buffer
+  for (int i=0; i<4; i++) {
+    serialWrite(csyncPort, 'x');
+  }
 }
 
 int rx_cplt_count = 0;
@@ -34,26 +39,39 @@ int framesSentCount = 0;
 
 extern uartPort_t* tmpDmaUartPort;
 
-#define kFrameSize 24
+#define kFrameSize 8
 #define kNumFrames 3
 const int kTotalBufferSize = kFrameSize * kNumFrames;
 const uint8_t kStartByte = 0xAA;
 
-int currentReadFrame = 0;
-int currentReadFrameStart = 0;
+volatile int currentReadFrame = 0;
+volatile int currentReadFrameStart = 0;
 
-int gapStart = -1;
-int gapEnd = -1;
+volatile int gapStart = -1;
+volatile int gapEnd = -1;
 
-int requestedResyncBytes = -1;
+volatile int requestedResyncBytes = -1;
 
 // populated on the first callback
-uint8_t* buffer = NULL;
+volatile uint8_t* buffer = NULL;
+
+void printFrame(volatile uint8_t* frameBuffer) {
+  for (int i=0; i<kFrameSize; i++) {
+    debugPrintx(frameBuffer[i]);
+    debugPrint(" ");
+  }
+}
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-  UNUSED(huart);
+  if (huart != &tmpDmaUartPort->Handle) {
+    return;
+  }
 
-  buffer = (uint8_t*)tmpDmaUartPort->port.rxBuffer;
+  buffer = tmpDmaUartPort->port.rxBuffer;
+
+  debugPrint("----------------------------------------- read: ");
+  printFrame(buffer + currentReadFrameStart);
+  debugPrint("\r\n");
 
   rx_cplt_count++;
   currentReadFrame = (currentReadFrame + 1) % kNumFrames;
@@ -67,7 +85,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     gapStart = currentReadFrameStart + size;
     gapEnd = currentReadFrameStart + kFrameSize;
   }
-  HAL_UART_Receive_DMA(&tmpDmaUartPort->Handle, buffer + currentReadFrameStart, size);
+  HAL_UART_Receive_DMA(&tmpDmaUartPort->Handle, (uint8_t*)buffer + currentReadFrameStart, size);
 }
 
 int bufferHead() {
@@ -89,7 +107,8 @@ bool areBytesAvailable() {
   if (buffer == NULL) {
     return false;
   }
-  return bufferHead() != tail;
+  //return bufferHead() != tail;
+  return currentReadFrameStart != tail;
 }
 
 uint8_t readByte() {
@@ -102,6 +121,9 @@ uint8_t readByte() {
 bool isValidFrame(uint8_t* frameBuffer) {
   for (int i=0; i<kFrameSize; i++) {
     if (frameBuffer[i] != i+0xAA) {
+      debugPrint("bad frame: ");
+      printFrame(frameBuffer);
+      debugPrint("\r\n");
       return false;
     }
   }
@@ -146,7 +168,7 @@ void processAvailableData() {
 
     if (nextStartCandidate != -1) {
       // Shift the buffer to put the start byte at the beginning
-      memcpy(frameBuffer, frameBuffer + nextStartCandidate, kFrameSize - nextStartCandidate);
+      memmove(frameBuffer, frameBuffer + nextStartCandidate, kFrameSize - nextStartCandidate);
       bufferPos = kFrameSize - nextStartCandidate;
     } else {
       bufferPos = 0;
@@ -161,10 +183,14 @@ void controllerSyncUpdate() {
 
   processAvailableData();
 
-  for (int i=0; i<kFrameSize; i++) {
-    serialWrite(csyncPort, kStartByte + i);
+  static int ds2 = 0;
+  if (++ds2 >= 10) {
+    ds2 = 0;
+    for (int i=0; i<kFrameSize; i++) {
+      serialWrite(csyncPort, kStartByte + i);
+    }
+    framesSentCount++;
   }
-  framesSentCount++;
 
   static int downsample = 0;
   if (++downsample >= 100) {
