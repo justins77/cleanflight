@@ -215,18 +215,6 @@ void uartReconfigure(uartPort_t *uartPort)
     return;
 }
 
-int rx_cplt_count = 0;
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-  UNUSED(huart);
-  rx_cplt_count++;
-  HAL_UART_Receive_DMA(&tmpDmaUartPort->Handle, (uint8_t*)tmpDmaUartPort->port.rxBuffer, tmpDmaUartPort->port.rxBufferSize);
-}
-
-//int rx_cplt_count = 0;
-//void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-//  rx_cplt_count++;
-//}
-
 serialPort_t *uartOpen(UARTDevice_e device, serialReceiveCallbackPtr callback, void *callbackData, uint32_t baudRate, portMode_e mode, portOptions_e options)
 {
     uartPort_t *s = serialUART(device, baudRate, mode, options);
