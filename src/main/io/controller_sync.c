@@ -50,13 +50,13 @@ void controllerSyncInit() {
 			     0);
   debugPrintVar("csyncPort: ", (int)csyncPort);
 
-  // send a few bytes to intentionally misalign buffer
-  for (int i=0; i<4; i++) {
-    serialWrite(csyncPort, 'x');
-  }
-
   //buffer = tmpDmaUartPort->port.rxBuffer;
   HAL_UART_Receive_DMA(&tmpDmaUartPort->Handle, (uint8_t*)buffer + currentReadFrameStart, kFrameSize);
+
+  // send a few bytes to intentionally misalign buffer
+  for (int i=0; i<6; i++) {
+    serialWrite(csyncPort, 'x');
+  }
 }
 
 void printFrame(volatile uint8_t* frameBuffer) {
@@ -96,6 +96,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 
     gapStart = currentReadFrameStart + size;
     gapEnd = currentReadFrameStart + kFrameSize;
+
+    // temporary for debugging:
+    for (int i=gapStart; i<gapEnd; i++) {
+      buffer[i] = 0;
+    }
   }
 
   //for (int i=0; i<kTotalBufferSize; i++) {
@@ -181,6 +186,11 @@ void processAvailableData() {
       // TODO: verify that we are on a frame boundary for async reads
       //   if so, capture the timestamp and process
       //   if not, request a resync
+      int frameOffset = tail % kFrameSize;
+      if (frameOffset != 0 && requestedResyncBytes <= 0 && gapStart <= 0) {
+	requestedResyncBytes = frameOffset;
+	debugPrintVar("requesting resync: ", requestedResyncBytes);
+      }
       return;
     } else {
       frameErrorCount++;
