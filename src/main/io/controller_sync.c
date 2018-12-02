@@ -98,9 +98,9 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     gapEnd = currentReadFrameStart + kFrameSize;
   }
 
-  for (int i=0; i<kTotalBufferSize; i++) {
-    buffer[i] = 0;
-  }
+  //for (int i=0; i<kTotalBufferSize; i++) {
+  //  buffer[i] = 0;
+  //}
 
   debugPrint(" ");
   debugPrinti(currentReadFrameStart);
@@ -210,7 +210,7 @@ void controllerSyncUpdate() {
     return;
   }
 
-  //processAvailableData();
+  processAvailableData();
 
   static uint8_t nextByte = 0;
   static int ds2 = 0;
