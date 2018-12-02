@@ -92,10 +92,9 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   int size = kFrameSize;
   if (requestedResyncBytes > 0) {
     size = requestedResyncBytes;
-    requestedResyncBytes = -1;
-
     gapStart = currentReadFrameStart + size;
-    gapEnd = currentReadFrameStart + kFrameSize;
+    gapEnd = (currentReadFrameStart + kFrameSize) % kTotalBufferSize;
+    requestedResyncBytes = -1;
 
     // temporary for debugging:
     for (int i=gapStart; i<gapEnd; i++) {
@@ -215,6 +214,24 @@ void processAvailableData() {
   }
 }
 
+// periodically drop a byte or add a spurious byte
+void unreliableWrite(serialPort_t *instance, uint8_t ch) {
+  static int counter = 0;
+  static bool dropOrAdd = false;
+
+  if (counter++ >= 1000) {
+    counter = 0;
+    if (dropOrAdd) {
+      dropOrAdd = false;
+      return;
+    } else {
+      serialWrite(instance, 0xFF);
+      dropOrAdd = true;
+    }
+  }
+  serialWrite(instance, ch);
+}
+
 void controllerSyncUpdate() {
   if (!csyncPort) {
     return;
@@ -227,9 +244,9 @@ void controllerSyncUpdate() {
   if (++ds2 >= 10) {
     ds2 = 0;
 
-    serialWrite(csyncPort, kStartByte);
+    unreliableWrite(csyncPort, kStartByte);
     for (int i=1; i<kFrameSize; i++) {
-      serialWrite(csyncPort, nextByte++);
+      unreliableWrite(csyncPort, nextByte++);
     }
     framesSentCount++;
   }
