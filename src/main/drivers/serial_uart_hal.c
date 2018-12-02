@@ -148,12 +148,12 @@ void uartReconfigure(uartPort_t *uartPort)
             /* Associate the initialized DMA handle to the UART handle */
             __HAL_LINKDMA(&uartPort->Handle, hdmarx, uartPort->rxDMAHandle);
 
-	    debugPrintVar("starting DMA rx ", (int)uartPort);
-	    debugPrintVarib("CR ", uartPort->Handle.hdmarx->Instance->CR);
+	    //debugPrintVar("starting DMA rx ", (int)uartPort);
+	    //debugPrintVarib("CR ", uartPort->Handle.hdmarx->Instance->CR);
 	    tmpDmaUartPort = uartPort;
-            int result = HAL_UART_Receive_DMA(&uartPort->Handle, (uint8_t*)uartPort->port.rxBuffer, uartPort->port.rxBufferSize);
-	    debugPrintVar("result ", (int)result);
-	    debugPrintVarib("CR ", uartPort->Handle.hdmarx->Instance->CR);
+            //int result = HAL_UART_Receive_DMA(&uartPort->Handle, (uint8_t*)uartPort->port.rxBuffer, uartPort->port.rxBufferSize);
+	    //debugPrintVar("result ", (int)result);
+	    //debugPrintVarib("CR ", uartPort->Handle.hdmarx->Instance->CR);
 
             uartPort->rxDMAPos = __HAL_DMA_GET_COUNTER(&uartPort->rxDMAHandle);
 

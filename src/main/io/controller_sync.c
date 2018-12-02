@@ -14,23 +14,6 @@ int sync_bytes_read = 0;
 
 static serialPort_t *csyncPort;
 
-void controllerSyncInit() {
-  debugPrint("opening port\r\n");
-  csyncPort = openSerialPort(SERIAL_PORT_USART2,
-			     FUNCTION_VTX_SMARTAUDIO,  // TODO: use my own function name
-			     NULL,
-			     NULL,
-			     115200,
-			     MODE_RXTX,
-			     0);
-  debugPrintVar("csyncPort: ", (int)csyncPort);
-
-  // send a few bytes to intentionally misalign buffer
-  for (int i=0; i<4; i++) {
-    serialWrite(csyncPort, 'x');
-  }
-}
-
 int rx_cplt_count = 0;
 int validFrameCount = 0;
 int frameErrorCount = 0;
@@ -53,11 +36,36 @@ volatile int gapEnd = -1;
 volatile int requestedResyncBytes = -1;
 
 // populated on the first callback
-volatile uint8_t* buffer = NULL;
+//volatile uint8_t* buffer = NULL;
+volatile uint8_t buffer[256];
+
+void controllerSyncInit() {
+  debugPrint("opening port\r\n");
+  csyncPort = openSerialPort(SERIAL_PORT_USART2,
+			     FUNCTION_VTX_SMARTAUDIO,  // TODO: use my own function name
+			     NULL,
+			     NULL,
+			     115200,
+			     MODE_RXTX,
+			     0);
+  debugPrintVar("csyncPort: ", (int)csyncPort);
+
+  // send a few bytes to intentionally misalign buffer
+  for (int i=0; i<4; i++) {
+    serialWrite(csyncPort, 'x');
+  }
+
+  //buffer = tmpDmaUartPort->port.rxBuffer;
+  HAL_UART_Receive_DMA(&tmpDmaUartPort->Handle, (uint8_t*)buffer + currentReadFrameStart, kFrameSize);
+}
 
 void printFrame(volatile uint8_t* frameBuffer) {
   for (int i=0; i<kFrameSize; i++) {
-    debugPrintx(frameBuffer[i]);
+    if (frameBuffer[i] == 0) {
+      debugPrint("..");
+    } else {
+      debugPrintx(frameBuffer[i]);
+    }
     debugPrint(" ");
   }
 }
@@ -67,11 +75,15 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     return;
   }
 
-  buffer = tmpDmaUartPort->port.rxBuffer;
-
-  debugPrint("----------------------------------------- read: ");
-  printFrame(buffer + currentReadFrameStart);
-  debugPrint("\r\n");
+  debugPrint("----------------------------------------- buffer: ");
+  //printFrame(buffer + currentReadFrameStart);
+  printFrame(buffer);
+  debugPrint(" | ");
+  printFrame(buffer + 8);
+  debugPrint(" | ");
+  printFrame(buffer + 16);
+  debugPrint(" | ");
+  debugPrinti(currentReadFrameStart);
 
   rx_cplt_count++;
   currentReadFrame = (currentReadFrame + 1) % kNumFrames;
@@ -85,6 +97,17 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     gapStart = currentReadFrameStart + size;
     gapEnd = currentReadFrameStart + kFrameSize;
   }
+
+  for (int i=0; i<kTotalBufferSize; i++) {
+    buffer[i] = 0;
+  }
+
+  debugPrint(" ");
+  debugPrinti(currentReadFrameStart);
+  debugPrint(" ");
+  debugPrinti(size);
+  debugPrint("\r\n");
+
   HAL_UART_Receive_DMA(&tmpDmaUartPort->Handle, (uint8_t*)buffer + currentReadFrameStart, size);
 }
 
@@ -117,10 +140,16 @@ uint8_t readByte() {
   return result;
 }
 
-// For now a valid packet is an ascending sequence starting at 0xAA
+// For now a valid packet starts with 0xAA and consists of ascending values.
 bool isValidFrame(uint8_t* frameBuffer) {
-  for (int i=0; i<kFrameSize; i++) {
-    if (frameBuffer[i] != i+0xAA) {
+  if (frameBuffer[0] != kStartByte) {
+      debugPrint("bad frame (bad start byte): ");
+      printFrame(frameBuffer);
+      debugPrint("\r\n");
+      return false;
+  }
+  for (int i=2; i<kFrameSize; i++) {
+    if (frameBuffer[i] != ((frameBuffer[i-1]+1) & 0xFF)) {
       debugPrint("bad frame: ");
       printFrame(frameBuffer);
       debugPrint("\r\n");
@@ -181,13 +210,16 @@ void controllerSyncUpdate() {
     return;
   }
 
-  processAvailableData();
+  //processAvailableData();
 
+  static uint8_t nextByte = 0;
   static int ds2 = 0;
   if (++ds2 >= 10) {
     ds2 = 0;
-    for (int i=0; i<kFrameSize; i++) {
-      serialWrite(csyncPort, kStartByte + i);
+
+    serialWrite(csyncPort, kStartByte);
+    for (int i=1; i<kFrameSize; i++) {
+      serialWrite(csyncPort, nextByte++);
     }
     framesSentCount++;
   }
