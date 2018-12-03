@@ -5,6 +5,7 @@
 
 #include "drivers/serial.h"
 #include "drivers/serial_uart.h"
+#include "drivers/time.h"
 
 #include "io/serial.h"
 #include "io/debug_console.h"
@@ -38,6 +39,9 @@ volatile int requestedResyncBytes = -1;
 // populated on the first callback
 //volatile uint8_t* buffer = NULL;
 volatile uint8_t buffer[256];
+
+volatile uint32_t frameRxUtime = 0;
+volatile uint32_t frameTxUtime = 0;
 
 void controllerSyncInit() {
   debugPrint("opening port\r\n");
@@ -74,6 +78,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   if (huart != &tmpDmaUartPort->Handle) {
     return;
   }
+
+  frameRxUtime = micros();
 
   debugPrint("----------------------------------------- buffer: ");
   //printFrame(buffer + currentReadFrameStart);
@@ -182,13 +188,18 @@ void processAvailableData() {
       validFrameCount++;
       bufferPos = 0;
       // NOTE: we process at most one frame per cycle
-      // TODO: verify that we are on a frame boundary for async reads
+      // verify that we are on a frame boundary for async reads
       //   if so, capture the timestamp and process
       //   if not, request a resync
       int frameOffset = tail % kFrameSize;
-      if (frameOffset != 0 && requestedResyncBytes <= 0 && gapStart <= 0) {
-	requestedResyncBytes = frameOffset;
-	debugPrintVar("requesting resync: ", requestedResyncBytes);
+      if (frameOffset == 0) {
+	uint32_t dt = frameRxUtime - frameTxUtime;
+	debugPrintVar("time in flight: ", dt);
+      } else {
+	if (requestedResyncBytes <= 0 && gapStart <= 0) {
+	  requestedResyncBytes = frameOffset;
+	  debugPrintVar("requesting resync: ", requestedResyncBytes);
+	}
       }
       return;
     } else {
@@ -244,9 +255,12 @@ void controllerSyncUpdate() {
   if (++ds2 >= 10) {
     ds2 = 0;
 
-    unreliableWrite(csyncPort, kStartByte);
+    frameTxUtime = micros();
+    //unreliableWrite(csyncPort, kStartByte);
+    serialWrite(csyncPort, kStartByte);
     for (int i=1; i<kFrameSize; i++) {
-      unreliableWrite(csyncPort, nextByte++);
+      //unreliableWrite(csyncPort, nextByte++);
+      serialWrite(csyncPort, nextByte++);
     }
     framesSentCount++;
   }
