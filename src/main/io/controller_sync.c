@@ -97,7 +97,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     requestedResyncBytes = -1;
 
     // temporary for debugging:
-    for (int i=gapStart; i<gapEnd; i++) {
+    for (int i=gapStart; i != gapEnd; i = (i+1) % kTotalBufferSize) {
       buffer[i] = 0;
     }
   }
