@@ -148,6 +148,7 @@ FC_SRC = \
             io/gps.c \
             io/controller_sync.c \
             io/debug_console.c \
+            io/fletcher.c \
             io/ledstrip.c \
             io/osd.c \
             io/pidaudio.c \
