@@ -36,6 +36,12 @@ void debugPrinti(int x) {
   debugPrint(buffer);
 }
 
+void debugPrintu(unsigned int x) {
+  char buffer[80];
+  ui2a(x, 10, 0, buffer);
+  debugPrint(buffer);
+}
+
 void debugPrintib(uint32_t x) {
   for (int i=31; i>=0; i--) {
     addDebugChar(((x >> i) & 1) ? '1' : '0');

@@ -9,6 +9,14 @@
 
 #include "io/serial.h"
 #include "io/debug_console.h"
+#include "io/fletcher.h"
+
+// If payload is modified, make sure to change kExpectedTransmissionTime
+typedef struct {
+  uint32_t utime;
+  int32_t clock_diff;
+} payload_t;
+
 
 int sync_bytes_written = 0;
 int sync_bytes_read = 0;
@@ -23,7 +31,12 @@ int framesSentCount = 0;
 
 extern uartPort_t* tmpDmaUartPort;
 
-#define kFrameSize 8
+// frame is 1 start byte + payload + 2 checksum bytes
+#define kFrameSize (sizeof(payload_t) + 3)
+
+// This must change if payload size or baud rate changes
+#define kExpectedTransmissionTime 960
+
 #define kNumFrames 3
 const int kTotalBufferSize = kFrameSize * kNumFrames;
 const uint8_t kStartByte = 0xAA;
@@ -41,7 +54,9 @@ volatile int requestedResyncBytes = -1;
 volatile uint8_t buffer[256];
 
 volatile uint32_t frameRxUtime = 0;
-volatile uint32_t frameTxUtime = 0;
+
+// Estimated amount that the peer utime is ahead of our utime (or behind if negative)
+int32_t estimatedClockDelta = 0;
 
 void controllerSyncInit() {
   debugPrint("opening port\r\n");
@@ -64,7 +79,7 @@ void controllerSyncInit() {
 }
 
 void printFrame(volatile uint8_t* frameBuffer) {
-  for (int i=0; i<kFrameSize; i++) {
+  for (uint32_t i=0; i<kFrameSize; i++) {
     if (frameBuffer[i] == 0) {
       debugPrint("..");
     } else {
@@ -85,9 +100,9 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   //printFrame(buffer + currentReadFrameStart);
   printFrame(buffer);
   debugPrint(" | ");
-  printFrame(buffer + 8);
+  printFrame(buffer + kFrameSize);
   debugPrint(" | ");
-  printFrame(buffer + 16);
+  printFrame(buffer + (kFrameSize*2));
   debugPrint(" | ");
   debugPrinti(currentReadFrameStart);
 
@@ -158,13 +173,15 @@ bool isValidFrame(uint8_t* frameBuffer) {
       debugPrint("\r\n");
       return false;
   }
-  for (int i=2; i<kFrameSize; i++) {
-    if (frameBuffer[i] != ((frameBuffer[i-1]+1) & 0xFF)) {
-      debugPrint("bad frame: ");
-      printFrame(frameBuffer);
-      debugPrint("\r\n");
-      return false;
-    }
+
+  uint16_t computedChecksum = compute_fletcher16(frameBuffer + 1, sizeof(payload_t));
+  uint16_t receivedChecksum = *((uint16_t*)(frameBuffer + 1 + sizeof(payload_t)));
+
+  if (computedChecksum != receivedChecksum) {
+    debugPrint("bad frame (bad checksum): ");
+    printFrame(frameBuffer);
+    debugPrint("\r\n");
+    return false;
   }
   return true;
 }
@@ -185,6 +202,7 @@ void processAvailableData() {
     }
 
     if (isValidFrame(frameBuffer)) {
+      payload_t* payload = (payload_t*)(frameBuffer + 1);
       validFrameCount++;
       bufferPos = 0;
       // NOTE: we process at most one frame per cycle
@@ -193,8 +211,18 @@ void processAvailableData() {
       //   if not, request a resync
       int frameOffset = tail % kFrameSize;
       if (frameOffset == 0) {
-	uint32_t dt = frameRxUtime - frameTxUtime;
-	debugPrintVar("time in flight: ", dt);
+	//uint32_t dt = frameRxUtime - payload->utime;
+	//debugPrintVar("time in flight: ", dt);
+	estimatedClockDelta = (int32_t)(payload->utime - (frameRxUtime - kExpectedTransmissionTime));
+
+	// We print out (utime, our detla, peer delta negated) as that's a convenient tuple for graphing.
+	debugPrint("clockDeltaData ");
+	debugPrintu(payload->utime);
+	debugPrint(",");
+	debugPrinti(estimatedClockDelta);
+	debugPrint(",");
+	debugPrinti(-payload->clock_diff);
+	debugPrint("\r\n");
       } else {
 	if (requestedResyncBytes <= 0 && gapStart <= 0) {
 	  requestedResyncBytes = frameOffset;
@@ -243,6 +271,17 @@ void unreliableWrite(serialPort_t *instance, uint8_t ch) {
   serialWrite(instance, ch);
 }
 
+void sendFrame(serialPort_t* instance, payload_t* payload) {
+  serialWrite(instance, kStartByte);
+  uint8_t* payload_data = (uint8_t*)payload;
+  for (int i=0; i<sizeof(payload_t); i++) {
+    serialWrite(instance, payload_data[i]);
+  }
+  uint16_t checksum = compute_fletcher16(payload_data, sizeof(payload_t));
+  serialWrite(instance, checksum & 0xFF);
+  serialWrite(instance, (checksum >> 8) & 0xFF);
+}
+
 void controllerSyncUpdate() {
   if (!csyncPort) {
     return;
@@ -250,18 +289,14 @@ void controllerSyncUpdate() {
 
   processAvailableData();
 
-  static uint8_t nextByte = 0;
   static int ds2 = 0;
   if (++ds2 >= 10) {
     ds2 = 0;
 
-    frameTxUtime = micros();
-    //unreliableWrite(csyncPort, kStartByte);
-    serialWrite(csyncPort, kStartByte);
-    for (int i=1; i<kFrameSize; i++) {
-      //unreliableWrite(csyncPort, nextByte++);
-      serialWrite(csyncPort, nextByte++);
-    }
+    payload_t payload;
+    payload.utime = micros();
+    payload.clock_diff = estimatedClockDelta;
+    sendFrame(csyncPort, &payload);
     framesSentCount++;
   }
 
