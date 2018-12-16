@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 #
 # Very simple serial terminal
 #
@@ -6,11 +6,18 @@
 # (C)2002-2015 Chris Liechti <cliechti@gmx.net>
 #
 # SPDX-License-Identifier:    BSD-3-Clause
+#
+##############################################################################
+#
+# Modified for use with cleanflight output and visualization tools.
+#
+
 
 import codecs
 import os
 import sys
 import threading
+import time
 
 import serial
 from serial.tools.list_ports import comports
@@ -464,6 +471,10 @@ class Miniterm(object):
         """
         menu_active = False
         try:
+            time.sleep(0.5)
+            self.serial.write('#')
+            time.sleep(0.2)
+            self.serial.write('csync\r')
             while self.alive:
                 try:
                     c = self.console.getkey()
