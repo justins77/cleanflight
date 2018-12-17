@@ -1,16 +1,26 @@
-import numpy as np
-import matplotlib.animation as animation
-import matplotlib.pyplot as plt
+from collections import OrderedDict
 import math
 import threading
 import time
+import re
 
+import numpy as np
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+
+class Series(object):
+    def __init__(self, name):
+        self.name = name
+        self.xs = []
+        self.ys = []
+
+
+MAX_HISTORY = 100
 
 class ContinuousPlotter(object):
     def __init__(self):
         self.lock = threading.Lock()
-        self.xs = []
-        self.ys = []
+        self.series_map = OrderedDict()
         fig = plt.figure()
         self.ax = fig.add_subplot(1, 1, 1)
         self.ani = animation.FuncAnimation(fig, self._animation_function, interval=100)
@@ -19,17 +29,29 @@ class ContinuousPlotter(object):
         self.ax.clear()
         self.ax.grid(True)
         with self.lock:
-            self.ax.plot(self.xs, self.ys)
+            legend = []
+            for series in self.series_map.values():
+                self.ax.plot(series.xs, series.ys)
+                legend.append(series.name)
+            self.ax.legend(legend, loc='upper left')
 
-    def append_now(self, y):
-        self.append(time.time(), y)
+    def _get_series(self, name):
+        if name in self.series_map:
+            return self.series_map[name]
+        series = Series(name)
+        self.series_map[name] = series
+        return series
 
-    def append(self, x, y):
+    def append_now(self, name, y):
+        self.append(name, time.time(), y)
+
+    def append(self, name, x, y):
         with self.lock:
-            self.xs = self.xs[-100:]
-            self.ys = self.ys[-100:]
-            self.xs.append(x)
-            self.ys.append(y)
+            series = self._get_series(name)
+            series.xs = series.xs[-MAX_HISTORY:]
+            series.ys = series.ys[-MAX_HISTORY:]
+            series.xs.append(x)
+            series.ys.append(y)
 
     def run(self):
         plt.show()
@@ -40,10 +62,31 @@ class ContinuousPlotter(object):
         thread.start()
 
 
+class CsyncContinuousPlotter(ContinuousPlotter):
+    def __init__(self):
+        super(CsyncContinuousPlotter, self).__init__()
+        self.buffer = ''
+
+    def write(self, text):
+        self.buffer += text
+        while True:
+            cr_pos = self.buffer.find('\n')
+            if cr_pos < 0:
+                break
+            line = self.buffer[0:cr_pos]
+            self.buffer = self.buffer[cr_pos+1:]
+            self.process_line(line)
+
+    def process_line(self, line):
+        match = re.match(r'my clock delta estimate:\s+([0-9\-]+)', line)
+        if match:
+            self.append_now('clock_delta_estimate', int(match.group(1)))
+
 def main_loop(plotter):
     i = 0
     while True:
-        plotter.append(time.time(), math.sin(i/10.))
+        plotter.append('sin', time.time(), math.sin(i/10.))
+        plotter.append('cos', time.time(), math.cos(i/10.))
         time.sleep(0.1)
         i += 1
 
@@ -58,5 +101,5 @@ def main():
     plotter.run()
 
 
-
-main()
+if __name__ == '__main__':
+    main()

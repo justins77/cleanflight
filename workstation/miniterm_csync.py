@@ -23,6 +23,8 @@ import serial
 from serial.tools.list_ports import comports
 from serial.tools import hexlify_codec
 
+from continuous_plotter import CsyncContinuousPlotter
+
 # pylint: disable=wrong-import-order,wrong-import-position
 
 codecs.register(lambda c: hexlify_codec.getregentry() if c == 'hexlify' else None)
@@ -344,7 +346,7 @@ class Miniterm(object):
     Handle special keys from the console to show menu etc.
     """
 
-    def __init__(self, serial_instance, echo=False, eol='crlf', filters=()):
+    def __init__(self, serial_instance, echo=False, eol='crlf', filters=(), listener=None):
         self.console = Console()
         self.serial = serial_instance
         self.echo = echo
@@ -361,6 +363,7 @@ class Miniterm(object):
         self.receiver_thread = None
         self.rx_decoder = None
         self.tx_decoder = None
+        self.listener = listener
 
     def _start_reader(self):
         """Start reader thread"""
@@ -458,6 +461,8 @@ class Miniterm(object):
                         for transformation in self.rx_transformations:
                             text = transformation.rx(text)
                         self.console.write(text)
+                        if self.listener:
+                            self.listener.write(text)
         except serial.SerialException:
             self.alive = False
             self.console.cancel()
@@ -786,6 +791,11 @@ def main(default_port=None, default_baudrate=9600, default_rts=None, default_dtr
         help="set baud rate, default: %(default)s",
         default=default_baudrate)
 
+    parser.add_argument(
+        "--graph",
+        action='store_true',
+        default=False)
+
     group = parser.add_argument_group("port settings")
 
     group.add_argument(
@@ -952,11 +962,16 @@ def main(default_port=None, default_baudrate=9600, default_rts=None, default_dtr
         else:
             break
 
+    plotter = None
+    if args.graph:
+        plotter = CsyncContinuousPlotter()
+
     miniterm = Miniterm(
         serial_instance,
         echo=args.echo,
         eol=args.eol.lower(),
-        filters=filters)
+        filters=filters,
+        listener=plotter)
     miniterm.exit_character = unichr(args.exit_char)
     miniterm.menu_character = unichr(args.menu_char)
     miniterm.raw = args.raw
@@ -973,6 +988,10 @@ def main(default_port=None, default_baudrate=9600, default_rts=None, default_dtr
             key_description('\x08')))
 
     miniterm.start()
+
+    if plotter:
+        plotter.run()
+
     try:
         miniterm.join(True)
     except KeyboardInterrupt:
