@@ -21,17 +21,22 @@ class ContinuousPlotter(object):
     def __init__(self):
         self.lock = threading.Lock()
         self.series_map = OrderedDict()
-        fig = plt.figure()
-        self.ax = fig.add_subplot(1, 1, 1)
-        self.ani = animation.FuncAnimation(fig, self._animation_function, interval=100)
+        self.fig = plt.figure()
+        self.ax = self.fig.add_subplot(1, 1, 1)
+        self.ani = animation.FuncAnimation(self.fig, self._animation_function, interval=100)
+        self.has_new_data = True
 
     def _animation_function(self, unused):
+        if not self.has_new_data:
+            return
+        self.has_new_data = False
+
         self.ax.clear()
         self.ax.grid(True)
         with self.lock:
             legend = []
             for series in self.series_map.values():
-                self.ax.plot(series.xs, series.ys)
+                self.ax.plot(series.xs, series.ys, marker='o')
                 legend.append(series.name)
             self.ax.legend(legend, loc='upper left')
 
@@ -52,6 +57,7 @@ class ContinuousPlotter(object):
             series.ys = series.ys[-MAX_HISTORY:]
             series.xs.append(x)
             series.ys.append(y)
+        self.has_new_data = True
 
     def run(self):
         plt.show()
@@ -78,10 +84,13 @@ class CsyncContinuousPlotter(ContinuousPlotter):
             self.process_line(line)
 
     def process_line(self, line):
-        match = re.match(r'my clock delta estimate:\s+([0-9\-]+)', line)
+        match = re.match(r'clockDeltaData ([0-9\-]+),([0-9\-]+),([0-9\-]+)', line)
         if match:
-            self.append_now('clock_delta_estimate', int(match.group(1)))
+            self.append_now('ours', int(match.group(2)))
+            self.append_now('theirs', int(match.group(3)))
 
+
+# For testing only
 def main_loop(plotter):
     i = 0
     while True:
