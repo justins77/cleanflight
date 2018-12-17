@@ -87,6 +87,8 @@
 #define USE_MAG
 #define USE_MAG_HMC5883
 
+#define USE_UART2_RX_DMA
+//define USE_UART2_TX_DMA
 #define USE_VCP
 #define USE_UART1
 #define USE_UART2
@@ -215,7 +217,7 @@
 
 #define GPS_UART                            SERIAL_PORT_USART3
 
-#define SERIALRX_UART                       SERIAL_PORT_USART2
+//define SERIALRX_UART                       SERIAL_PORT_USART2
 #define SERIALRX_PROVIDER                   SERIALRX_SBUS
 
 #define SPEKTRUM_BIND_PIN       UART2_RX_PIN
@@ -234,4 +236,3 @@
 //#define USABLE_TIMER_CHANNEL_COUNT 16 // 4xPWM, 8xESC, 2xESC via UART3 RX/TX, 1xLED Strip, 1xIR.
 #define USABLE_TIMER_CHANNEL_COUNT 16
 #define USED_TIMERS  (TIM_N(1) | TIM_N(2) | TIM_N(3) | TIM_N(4) | TIM_N(8) | TIM_N(9))
-

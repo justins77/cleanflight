@@ -43,6 +43,8 @@
 #include "drivers/serial_uart.h"
 #include "drivers/serial_uart_impl.h"
 
+#include "io/debug_console.h"
+
 static void usartConfigurePinInversion(uartPort_t *uartPort) {
     bool inverted = uartPort->port.options & SERIAL_INVERTED;
 
@@ -62,6 +64,9 @@ static void usartConfigurePinInversion(uartPort_t *uartPort) {
 }
 
 // XXX uartReconfigure does not handle resource management properly.
+
+// SUPER HACK - just for testing callbacks
+uartPort_t* tmpDmaUartPort = NULL;
 
 void uartReconfigure(uartPort_t *uartPort)
 {
@@ -123,7 +128,12 @@ void uartReconfigure(uartPort_t *uartPort)
             uartPort->rxDMAHandle.Init.MemInc = DMA_MINC_ENABLE;
             uartPort->rxDMAHandle.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
             uartPort->rxDMAHandle.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
-            uartPort->rxDMAHandle.Init.Mode = DMA_CIRCULAR;
+
+	    // TODO(justin): we may not want this to be circular; we might want to explicitly
+	    // read from a rotating list of buffers so we can get precise timing on each packet.
+            //uartPort->rxDMAHandle.Init.Mode = DMA_CIRCULAR;
+            uartPort->rxDMAHandle.Init.Mode = DMA_NORMAL;
+
             uartPort->rxDMAHandle.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
             uartPort->rxDMAHandle.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_1QUARTERFULL;
             uartPort->rxDMAHandle.Init.PeriphBurst = DMA_PBURST_SINGLE;
@@ -131,15 +141,29 @@ void uartReconfigure(uartPort_t *uartPort)
             uartPort->rxDMAHandle.Init.Priority = DMA_PRIORITY_MEDIUM;
 
 
-            HAL_DMA_DeInit(&uartPort->rxDMAHandle);
-            HAL_DMA_Init(&uartPort->rxDMAHandle);
+            int r2 = HAL_DMA_DeInit(&uartPort->rxDMAHandle);
+	    debugPrintVar("r2 ", r2);
+            int r3 = HAL_DMA_Init(&uartPort->rxDMAHandle);
+	    debugPrintVar("r3 ", r3);
             /* Associate the initialized DMA handle to the UART handle */
             __HAL_LINKDMA(&uartPort->Handle, hdmarx, uartPort->rxDMAHandle);
 
-            HAL_UART_Receive_DMA(&uartPort->Handle, (uint8_t*)uartPort->port.rxBuffer, uartPort->port.rxBufferSize);
+	    //debugPrintVar("starting DMA rx ", (int)uartPort);
+	    //debugPrintVarib("CR ", uartPort->Handle.hdmarx->Instance->CR);
+	    tmpDmaUartPort = uartPort;
+            //int result = HAL_UART_Receive_DMA(&uartPort->Handle, (uint8_t*)uartPort->port.rxBuffer, uartPort->port.rxBufferSize);
+	    //debugPrintVar("result ", (int)result);
+	    //debugPrintVarib("CR ", uartPort->Handle.hdmarx->Instance->CR);
 
             uartPort->rxDMAPos = __HAL_DMA_GET_COUNTER(&uartPort->rxDMAHandle);
 
+	    // THIS IS THE KEY!
+	    HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+	    HAL_NVIC_EnableIRQ(USART2_IRQn);
+
+	    //SET_BIT(uartPort->USARTx->CR3, USART_CR3_DMAR);
+            //SET_BIT(uartPort->USARTx->CR1, USART_CR1_RXNEIE);
+            //SET_BIT(uartPort->USARTx->CR1, USART_CR1_TCIE);
         }
         else
         {
@@ -258,6 +282,23 @@ uint32_t uartTotalRxBytesWaiting(const serialPort_t *instance)
 
     if (s->rxDMAStream) {
         uint32_t rxDMAHead = __HAL_DMA_GET_COUNTER(s->Handle.hdmarx);
+
+	static int downsample = 0;
+	if (downsample++ >= 1000) {
+	  downsample = 0;
+	  debugPrintVar("rxDMAHead ", rxDMAHead);
+	  debugPrintVar("hdmarx->State ", s->Handle.hdmarx->State);
+	  debugPrintVar("ErrorCode ", s->Handle.ErrorCode);
+	  debugPrintVar("RxState ", s->Handle.RxState);
+	  debugPrintVar("RxXferSize ", s->Handle.RxXferSize);
+	  debugPrintVarib("DMA CR: ", s->Handle.hdmarx->Instance->CR);
+	  debugPrint(     "         3 2 2 2 2 2 1 1 1 1 1 0 0 0 0 0\r\n");
+	  debugPrint(     "         0 8 6 4 2 0 8 6 4 2 0 8 6 4 2 0\r\n");
+	  debugPrintVarib("CR1   : ", s->Handle.Instance->CR1);
+	  debugPrintVarib("CR2   : ", s->Handle.Instance->CR2);
+	  debugPrintVarib("CR3   : ", s->Handle.Instance->CR3);
+	  //s->Handle.hdmarx->Instance->CR |= 1;
+	}
 
         if (rxDMAHead >= s->rxDMAPos) {
             return rxDMAHead - s->rxDMAPos;

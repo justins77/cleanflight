@@ -135,6 +135,8 @@ typedef enum {
     TASK_PINIOBOX,
 #endif
 
+    TASK_CONTROLLER_SYNC,
+    
     /* Count of real tasks */
     TASK_COUNT,
 

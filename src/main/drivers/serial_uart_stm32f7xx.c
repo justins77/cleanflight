@@ -37,6 +37,8 @@
 #include "drivers/serial_uart.h"
 #include "drivers/serial_uart_impl.h"
 
+#include "io/debug_console.h"
+
 #ifdef USE_UART
 
 static void handleUsartTxDma(uartPort_t *s);
@@ -86,9 +88,10 @@ const uartHardware_t uartHardware[UARTDEV_COUNT] = {
 #endif
         .rcc_apb1 = RCC_APB1(USART2),
         .txIrq = DMA1_ST6_HANDLER,
-        .rxIrq = USART2_IRQn,
+        //.rxIrq = USART2_IRQn,
+        .rxIrq = DMA1_ST5_HANDLER,
         .txPriority = NVIC_PRIO_SERIALUART2_TXDMA,
-        .rxPriority = NVIC_PRIO_SERIALUART2
+        .rxPriority = NVIC_PRIO_SERIALUART2_RXDMA
     },
 #endif
 
@@ -247,6 +250,18 @@ void uartIrqHandler(uartPort_t *s)
 {
     UART_HandleTypeDef *huart = &s->Handle;
     /* UART in mode Receiver ---------------------------------------------------*/
+
+    // TODO(justin): I think this block needs to be modified to capture timestamps at the end of
+    // the read in the DMA case.  We'll also need to be modify the buffer size to match the size of
+    // our data packet, and do something intelligent for realignment when the read is complete.
+
+    // TODO(justin): make sure we are getting interrupts in the DMA read case.  In the TX case I
+    // don't see anything explicitly requesting them so I think we should be getting them here, but
+    // need to check by implementing a debug counter.
+    //
+    // Alternatively, we can try implementing HAL_UART_RxCpltCallback and see if that gets called.
+    // Strange that they don't seem to use that in the Tx case though.
+
     if ((__HAL_UART_GET_IT(huart, UART_IT_RXNE) != RESET)) {
         uint8_t rbyte = (uint8_t)(huart->Instance->RDR & (uint8_t) 0xff);
 
@@ -328,6 +343,15 @@ void dmaIRQHandler(dmaChannelDescriptor_t* descriptor)
     HAL_DMA_IRQHandler(&s->txDMAHandle);
 }
 
+void dmaRxIRQHandler(dmaChannelDescriptor_t* descriptor)
+{
+    uartPort_t *s = &(((uartDevice_t*)(descriptor->userParam))->port);
+    //if (__HAL_DMA_GET_IT_SOURCE(&s->rxDMAHandle, DMA_IT_TC) != RESET) {
+    //  rx_cplt_count++;
+    //}
+    HAL_DMA_IRQHandler(&s->rxDMAHandle);
+}
+
 // XXX Should serialUART be consolidated?
 
 uartPort_t *serialUART(UARTDevice_e device, uint32_t baudRate, portMode_e mode, portOptions_e options)
@@ -355,6 +379,9 @@ uartPort_t *serialUART(UARTDevice_e device, uint32_t baudRate, portMode_e mode, 
     if (hardware->rxDMAStream) {
         s->rxDMAChannel = hardware->DMAChannel;
         s->rxDMAStream = hardware->rxDMAStream;
+	debugPrint("dmaInit for RX\r\n");
+	dmaInit(hardware->rxIrq, OWNER_SERIAL_RX, RESOURCE_INDEX(device));
+        dmaSetHandler(hardware->rxIrq, dmaRxIRQHandler, hardware->rxPriority, (uint32_t)uartdev);
     }
 
     if (hardware->txDMAStream) {
@@ -396,7 +423,12 @@ uartPort_t *serialUART(UARTDevice_e device, uint32_t baudRate, portMode_e mode, 
         }
     }
 
-    if (!s->rxDMAChannel) {
+    if (s->rxDMAChannel) {
+      //__HAL_RCC_DMA1_CLK_ENABLE();
+
+        HAL_NVIC_SetPriority(hardware->rxIrq, NVIC_PRIORITY_BASE(hardware->rxPriority), NVIC_PRIORITY_SUB(hardware->rxPriority));
+        HAL_NVIC_EnableIRQ(hardware->rxIrq);
+    } else {
         HAL_NVIC_SetPriority(hardware->rxIrq, NVIC_PRIORITY_BASE(hardware->rxPriority), NVIC_PRIORITY_SUB(hardware->rxPriority));
         HAL_NVIC_EnableIRQ(hardware->rxIrq);
     }

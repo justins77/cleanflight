@@ -118,6 +118,7 @@ extern uint8_t __config_end;
 #include "io/transponder_ir.h"
 #include "io/vtx_control.h"
 #include "io/vtx.h"
+#include "io/debug_console.h"
 
 #include "pg/adc.h"
 #include "pg/beeper.h"
@@ -157,6 +158,8 @@ extern uint8_t __config_end;
 
 
 static serialPort_t *cliPort;
+
+bool debugPrintMode = false;
 
 #ifdef STM32F1
 #define CLI_IN_BUFFER_SIZE 128
@@ -4340,6 +4343,14 @@ static void cliDump(char *cmdline)
     printConfig(cmdline, false);
 }
 
+extern int sync_bytes_written;
+extern int sync_bytes_read;
+
+static void cliControllerSync(char* cmdline) {
+  //cliPrintLinef("written: %d, read: %d\n", sync_bytes_written, sync_bytes_read);
+  debugPrintMode = true;
+}
+
 static void cliDiff(char *cmdline)
 {
     printConfig(cmdline, true);
@@ -4530,6 +4541,7 @@ const clicmd_t cmdTable[] = {
 #ifdef USE_VTX_CONTROL
     CLI_COMMAND_DEF("vtx", "vtx channels on switch", NULL, cliVtx),
 #endif
+    CLI_COMMAND_DEF("csync", "show controller sync stats", NULL, cliControllerSync),
 };
 
 static void cliHelp(char *cmdline)
@@ -4550,12 +4562,24 @@ static void cliHelp(char *cmdline)
     }
 }
 
+#define MAX_DEBUG_BYTES_PER_CYCLE 40
+
 void cliProcess(void)
 {
     if (!cliWriter) {
         return;
     }
 
+    if (debugPrintMode) {
+      for (int i=0; i<MAX_DEBUG_BYTES_PER_CYCLE; i++) {
+	int ch = getNextDebugChar();
+	if (ch < 0) {
+	  break;
+	}
+	cliWrite(ch);
+      }
+    }
+    
     // Be a little bit tricky.  Flush the last inputs buffer, if any.
     bufWriterFlush(cliWriter);
 

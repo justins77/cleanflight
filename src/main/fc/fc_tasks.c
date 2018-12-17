@@ -61,6 +61,7 @@
 
 #include "io/asyncfatfs/asyncfatfs.h"
 #include "io/beeper.h"
+#include "io/controller_sync.h"
 #include "io/dashboard.h"
 #include "io/gps.h"
 #include "io/ledstrip.h"
@@ -288,6 +289,9 @@ void fcTasksInit(void)
 #ifdef USE_GPS
     setTaskEnabled(TASK_GPS, feature(FEATURE_GPS));
 #endif
+
+    setTaskEnabled(TASK_CONTROLLER_SYNC, true);
+    
 #ifdef USE_MAG
     setTaskEnabled(TASK_COMPASS, sensors(SENSOR_MAG));
 #endif
@@ -295,6 +299,7 @@ void fcTasksInit(void)
     setTaskEnabled(TASK_BARO, sensors(SENSOR_BARO));
 #endif
 #if defined(USE_BARO) || defined(USE_GPS)
+
     setTaskEnabled(TASK_ALTITUDE, sensors(SENSOR_BARO) || feature(FEATURE_GPS));
 #endif
 #ifdef USE_DASHBOARD
@@ -488,6 +493,13 @@ cfTask_t cfTasks[TASK_COUNT] = {
     },
 #endif
 
+    [TASK_CONTROLLER_SYNC] = {
+      .taskName = "CONTROLLER_SYNC",
+      .taskFunc = controllerSyncUpdate,
+      .desiredPeriod = TASK_PERIOD_HZ(100),
+      .staticPriority = TASK_PRIORITY_MEDIUM,
+    },
+    
 #ifdef USE_MAG
     [TASK_COMPASS] = {
         .taskName = "COMPASS",
