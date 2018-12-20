@@ -3400,7 +3400,7 @@ STATIC_UNIT_TESTED void cliSet(char *cmdline)
                     }
 
                     break;
-                case MODE_LOOKUP: 
+                case MODE_LOOKUP:
                 case MODE_BITSET: {
                         int tableIndex;
                         if ((val->type & VALUE_MODE_MASK) == MODE_BITSET) {
@@ -4069,7 +4069,7 @@ static void printTimer(uint8_t dumpMask)
 
     cliPrint("#");
     cliPrintLinef(format, 'A', 1, 0);
-    
+
     for (unsigned int i = 0; i < MAX_TIMER_PINMAP_COUNT; i++) {
 
         const ioTag_t ioTag = timerIOConfig(i)->ioTag;
@@ -4080,8 +4080,8 @@ static void printTimer(uint8_t dumpMask)
         }
 
         if (timerIndex != 0 && !(dumpMask & HIDE_UNUSED)) {
-            cliDumpPrintLinef(dumpMask, false, format, 
-                IO_GPIOPortIdxByTag(ioTag) + 'A', 
+            cliDumpPrintLinef(dumpMask, false, format,
+                IO_GPIOPortIdxByTag(ioTag) + 'A',
                 IO_GPIOPinIdxByTag(ioTag),
                 timerIndex
                 );
@@ -4100,13 +4100,13 @@ static void cliTimer(char *cmdline)
         printTimer(DUMP_MASTER);
         return;
     }
-    
+
     char *pch = NULL;
     char *saveptr;
     int timerIOIndex = -1;
-    
+
     ioTag_t ioTag = 0;
-    pch = strtok_r(cmdline, " ", &saveptr);    
+    pch = strtok_r(cmdline, " ", &saveptr);
     if (!pch || !(strToPin(pch, &ioTag) && IOGetByTag(ioTag))) {
         goto error;
     }
@@ -4153,7 +4153,7 @@ static void cliTimer(char *cmdline)
         }
     } else {
         goto error;
-    }  
+    }
 
 success:
     timerIOConfigMutable(timerIOIndex)->ioTag = timerIndex == 0 ? IO_TAG_NONE : ioTag;
@@ -4161,7 +4161,7 @@ success:
 
     cliPrintLine("Success");
     return;
-    
+
 error:
     cliShowParseError();
 }
@@ -4186,7 +4186,7 @@ static void printConfig(char *cmdline, bool doDiff)
     if (doDiff) {
         dumpMask = dumpMask | DO_DIFF;
     }
-    
+
     backupAndResetConfigs();
     if (checkCommand(options, "defaults")) {
         dumpMask = dumpMask | SHOW_DEFAULTS;   // add default values as comments for changed values
@@ -4348,7 +4348,14 @@ extern int sync_bytes_read;
 
 static void cliControllerSync(char* cmdline) {
   //cliPrintLinef("written: %d, read: %d\n", sync_bytes_written, sync_bytes_read);
-  debugPrintMode = true;
+  if (isEmpty(cmdline)) {
+
+    // NOTE: CLI uses buffered writes, so micro can hang indefinitely if the connection is
+    // closed from the other end.
+    debugPrintMode = true;
+  } else {
+    debugPrintMode = false;
+  }
 }
 
 static void cliDiff(char *cmdline)
@@ -4579,7 +4586,7 @@ void cliProcess(void)
 	cliWrite(ch);
       }
     }
-    
+
     // Be a little bit tricky.  Flush the last inputs buffer, if any.
     bufWriterFlush(cliWriter);
 

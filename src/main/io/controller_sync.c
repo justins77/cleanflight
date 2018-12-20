@@ -34,9 +34,6 @@ extern uartPort_t* tmpDmaUartPort;
 // frame is 1 start byte + payload + 2 checksum bytes
 #define kFrameSize (sizeof(payload_t) + 3)
 
-// This must change if payload size or baud rate changes
-#define kExpectedTransmissionTime 960
-
 #define kNumFrames 3
 const int kTotalBufferSize = kFrameSize * kNumFrames;
 const uint8_t kStartByte = 0xAA;
@@ -55,8 +52,9 @@ volatile uint8_t buffer[256];
 
 volatile uint32_t frameRxUtime = 0;
 
-// Estimated amount that the peer utime is ahead of our utime (or behind if negative)
-int32_t estimatedClockDelta = 0;
+// Our receive utime minus peer send utime.  We are ahead of peer if this is positive, or
+// behind if this is negative.
+int32_t ourSendReceiveTimeDiff = 0;
 
 void controllerSyncInit() {
   debugPrint("opening port\r\n");
@@ -96,6 +94,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 
   frameRxUtime = micros();
 
+  /*
   debugPrint("----------------------------------------- buffer: ");
   //printFrame(buffer + currentReadFrameStart);
   printFrame(buffer);
@@ -105,6 +104,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   printFrame(buffer + (kFrameSize*2));
   debugPrint(" | ");
   debugPrinti(currentReadFrameStart);
+  */
 
   rx_cplt_count++;
   currentReadFrame = (currentReadFrame + 1) % kNumFrames;
@@ -127,11 +127,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   //  buffer[i] = 0;
   //}
 
+  /*
   debugPrint(" ");
   debugPrinti(currentReadFrameStart);
   debugPrint(" ");
   debugPrinti(size);
   debugPrint("\r\n");
+  */
 
   HAL_UART_Receive_DMA(&tmpDmaUartPort->Handle, (uint8_t*)buffer + currentReadFrameStart, size);
 }
@@ -213,7 +215,16 @@ void processAvailableData() {
       if (frameOffset == 0) {
 	//uint32_t dt = frameRxUtime - payload->utime;
 	//debugPrintVar("time in flight: ", dt);
-	estimatedClockDelta = (int32_t)(payload->utime - (frameRxUtime - kExpectedTransmissionTime));
+
+	// TODO: need to verify that frameRxUtime corresponds to the correct frame (it could point to
+	// a newer frame if our task has been starved for a while)
+	ourSendReceiveTimeDiff = (int32_t)(frameRxUtime - payload->utime);
+	int32_t theirSendReceiveTimeDiff = payload->clock_diff;
+
+	int32_t estimatedTransmissionTime = (ourSendReceiveTimeDiff + theirSendReceiveTimeDiff) / 2;
+
+	int32_t estimatedClockDelta = ourSendReceiveTimeDiff - estimatedTransmissionTime;
+	int32_t theirEstimatedClockDelta = theirSendReceiveTimeDiff - estimatedTransmissionTime;
 
 	// We print out (utime, our detla, peer delta negated) as that's a convenient tuple for graphing.
 	debugPrint("clockDeltaData ");
@@ -221,7 +232,9 @@ void processAvailableData() {
 	debugPrint(",");
 	debugPrinti(estimatedClockDelta);
 	debugPrint(",");
-	debugPrinti(-payload->clock_diff);
+	debugPrinti(-theirEstimatedClockDelta);
+	debugPrint(",");
+	debugPrinti(estimatedTransmissionTime);
 	debugPrint("\r\n");
       } else {
 	if (requestedResyncBytes <= 0 && gapStart <= 0) {
@@ -282,10 +295,25 @@ void sendFrame(serialPort_t* instance, payload_t* payload) {
   serialWrite(instance, (checksum >> 8) & 0xFF);
 }
 
+static uint32_t last_callback = 0;
+static uint32_t longest_gap;
+
 void controllerSyncUpdate() {
   if (!csyncPort) {
     return;
   }
+
+  uint32_t utime = micros();
+  if (last_callback != 0) {
+    uint32_t gap = utime - last_callback;
+    if (gap > 15000) {
+      debugPrintVar("LONG GAP: ", gap);
+    }
+    if (gap > longest_gap) {
+      longest_gap = gap;
+    }
+  }
+  last_callback = utime;
 
   processAvailableData();
 
@@ -295,7 +323,7 @@ void controllerSyncUpdate() {
 
     payload_t payload;
     payload.utime = micros();
-    payload.clock_diff = estimatedClockDelta;
+    payload.clock_diff = ourSendReceiveTimeDiff;
     sendFrame(csyncPort, &payload);
     framesSentCount++;
   }
@@ -311,6 +339,8 @@ void controllerSyncUpdate() {
     debugPrinti(frameErrorCount);
     debugPrint(" rx_callbacks: ");
     debugPrinti(rx_cplt_count);
+    debugPrint(" longest gap: ");
+    debugPrinti(longest_gap);
     debugPrint("\r\n");
   }
 }

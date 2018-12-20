@@ -81,13 +81,15 @@ class CsyncContinuousPlotter(ContinuousPlotter):
                 break
             line = self.buffer[0:cr_pos]
             self.buffer = self.buffer[cr_pos+1:]
-            self.process_line(line)
+            self.process_line(line.strip())
 
     def process_line(self, line):
-        match = re.match(r'clockDeltaData ([0-9\-]+),([0-9\-]+),([0-9\-]+)', line)
+        match = re.match(r'clockDeltaData ([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+)$', line)
         if match:
-            self.append_now('ours', int(match.group(2)))
-            self.append_now('theirs', int(match.group(3)))
+            publish_time = float(match.group(1)) / 1e6
+            self.append('ours', publish_time, int(match.group(2)))
+            self.append('theirs', publish_time, int(match.group(3)))
+            #self.append('tx_time', publish_time, int(match.group(4)))
 
 
 # For testing only

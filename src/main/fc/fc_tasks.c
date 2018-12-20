@@ -291,7 +291,7 @@ void fcTasksInit(void)
 #endif
 
     setTaskEnabled(TASK_CONTROLLER_SYNC, true);
-    
+
 #ifdef USE_MAG
     setTaskEnabled(TASK_COMPASS, sensors(SENSOR_MAG));
 #endif
@@ -497,9 +497,9 @@ cfTask_t cfTasks[TASK_COUNT] = {
       .taskName = "CONTROLLER_SYNC",
       .taskFunc = controllerSyncUpdate,
       .desiredPeriod = TASK_PERIOD_HZ(100),
-      .staticPriority = TASK_PRIORITY_MEDIUM,
+      .staticPriority = TASK_PRIORITY_REALTIME,
     },
-    
+
 #ifdef USE_MAG
     [TASK_COMPASS] = {
         .taskName = "COMPASS",
