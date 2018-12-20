@@ -50,11 +50,15 @@ volatile int requestedResyncBytes = -1;
 //volatile uint8_t* buffer = NULL;
 volatile uint8_t buffer[256];
 
+uint32_t frameTxUtime = 0;
 volatile uint32_t frameRxUtime = 0;
 
 // Our receive utime minus peer send utime.  We are ahead of peer if this is positive, or
 // behind if this is negative.
 int32_t ourSendReceiveTimeDiff = 0;
+
+// Difference in utime from one callback to the next on our side (uses no data from our peer).
+int32_t callbackInterval = 0;
 
 void controllerSyncInit() {
   debugPrint("opening port\r\n");
@@ -226,6 +230,11 @@ void processAvailableData() {
 	int32_t estimatedClockDelta = ourSendReceiveTimeDiff - estimatedTransmissionTime;
 	int32_t theirEstimatedClockDelta = theirSendReceiveTimeDiff - estimatedTransmissionTime;
 
+	uint32_t peerTxUtime = payload->utime + estimatedClockDelta;
+
+	// TODO: This needs to be modded to the range (-50k, +50k) (i.e. +/- 0.5 of the cycle period)
+	int32_t cycleStartDiff = frameTxUtime - peerTxUtime;
+
 	// We print out (utime, our detla, peer delta negated) as that's a convenient tuple for graphing.
 	debugPrint("clockDeltaData ");
 	debugPrintu(payload->utime);
@@ -235,6 +244,10 @@ void processAvailableData() {
 	debugPrinti(-theirEstimatedClockDelta);
 	debugPrint(",");
 	debugPrinti(estimatedTransmissionTime);
+	debugPrint(",");
+	debugPrinti(cycleStartDiff);
+	debugPrint(",");
+	debugPrinti(callbackInterval);
 	debugPrint("\r\n");
       } else {
 	if (requestedResyncBytes <= 0 && gapStart <= 0) {
@@ -305,16 +318,18 @@ void controllerSyncUpdate() {
 
   uint32_t utime = micros();
   if (last_callback != 0) {
-    uint32_t gap = utime - last_callback;
-    if (gap > 15000) {
-      debugPrintVar("LONG GAP: ", gap);
+    callbackInterval = utime - last_callback;
+    if (callbackInterval > 15000) {
+      debugPrintVar("LONG GAP: ", callbackInterval);
     }
-    if (gap > longest_gap) {
-      longest_gap = gap;
+    if (callbackInterval > longest_gap) {
+      longest_gap = callbackInterval;
     }
   }
   last_callback = utime;
 
+  // TODO: once we implement loop sync, we'll do this in the other order.  We transmit, then
+  // wait up to TIMEOUT to receive data from peer(s).
   processAvailableData();
 
   static int ds2 = 0;
@@ -323,6 +338,7 @@ void controllerSyncUpdate() {
 
     payload_t payload;
     payload.utime = micros();
+    frameTxUtime = payload.utime;
     payload.clock_diff = ourSendReceiveTimeDiff;
     sendFrame(csyncPort, &payload);
     framesSentCount++;

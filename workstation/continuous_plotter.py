@@ -84,12 +84,14 @@ class CsyncContinuousPlotter(ContinuousPlotter):
             self.process_line(line.strip())
 
     def process_line(self, line):
-        match = re.match(r'clockDeltaData ([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+)$', line)
+        match = re.match(r'clockDeltaData ([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+)$', line)
         if match:
             publish_time = float(match.group(1)) / 1e6
-            self.append('ours', publish_time, int(match.group(2)))
-            self.append('theirs', publish_time, int(match.group(3)))
+            #self.append('ours', publish_time, int(match.group(2)))
+            #self.append('theirs', publish_time, int(match.group(3)))
             #self.append('tx_time', publish_time, int(match.group(4)))
+            self.append('cycle_start_diff', publish_time, int(match.group(5)))
+            self.append('our_callback_interval', publish_time, int(match.group(6)))
 
 
 # For testing only
