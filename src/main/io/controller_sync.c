@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include "platform.h"
+#include "scheduler/scheduler.h"
 
 #include "drivers/serial.h"
 #include "drivers/serial_uart.h"
@@ -192,6 +193,18 @@ bool isValidFrame(uint8_t* frameBuffer) {
   return true;
 }
 
+extern cfTask_t cfTasks[];
+
+int32_t normalizeCycleDelta(int32_t delta) {
+  if (delta > 50000) {
+    return delta - 100000;
+  }
+  if (delta < -50000) {
+    return delta + 100000;
+  }
+  return delta;
+}
+
 void processAvailableData() {
   static uint8_t frameBuffer[kFrameSize];
   static int bufferPos = 0;
@@ -211,7 +224,6 @@ void processAvailableData() {
       payload_t* payload = (payload_t*)(frameBuffer + 1);
       validFrameCount++;
       bufferPos = 0;
-      // NOTE: we process at most one frame per cycle
       // verify that we are on a frame boundary for async reads
       //   if so, capture the timestamp and process
       //   if not, request a resync
@@ -235,6 +247,15 @@ void processAvailableData() {
 	// TODO: This needs to be modded to the range (-50k, +50k) (i.e. +/- 0.5 of the cycle period)
 	int32_t cycleStartDiff = frameTxUtime - peerTxUtime;
 
+	int32_t normalizedCycleDelta = normalizeCycleDelta(cycleStartDiff);
+	// TODO: right now this always goes faster or slower; when we're close we should only make small adjustments.
+	// TODO: have a param and only do this on the slave side
+	if (normalizedCycleDelta > 0) {
+	  cfTasks[TASK_CONTROLLER_SYNC].desiredPeriod = 9900;
+	} else {
+	  cfTasks[TASK_CONTROLLER_SYNC].desiredPeriod = 10100;
+	}
+
 	// We print out (utime, our detla, peer delta negated) as that's a convenient tuple for graphing.
 	debugPrint("clockDeltaData ");
 	debugPrintu(payload->utime);
@@ -255,7 +276,7 @@ void processAvailableData() {
 	  debugPrintVar("requesting resync: ", requestedResyncBytes);
 	}
       }
-      return;
+      continue;
     } else {
       frameErrorCount++;
     }
@@ -328,10 +349,6 @@ void controllerSyncUpdate() {
   }
   last_callback = utime;
 
-  // TODO: once we implement loop sync, we'll do this in the other order.  We transmit, then
-  // wait up to TIMEOUT to receive data from peer(s).
-  processAvailableData();
-
   static int ds2 = 0;
   if (++ds2 >= 10) {
     ds2 = 0;
@@ -342,6 +359,10 @@ void controllerSyncUpdate() {
     payload.clock_diff = ourSendReceiveTimeDiff;
     sendFrame(csyncPort, &payload);
     framesSentCount++;
+
+    delayMicroseconds(1500);
+
+    processAvailableData();
   }
 
   static int downsample = 0;
