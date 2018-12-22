@@ -263,11 +263,11 @@ void processAvailableData() {
 	  int32_t normalizedCycleDelta = normalizeCycleDelta(cycleStartDelta);
 	  // TODO: right now this always goes faster or slower; when we're close we should only make small adjustments.
 
-	  // We adjust by cycle delta / 5 to avoid making large changes.
+	  // We adjust by cycle delta divided by a scaling factor to avoid overcorrection
           cfTasks[TASK_CONTROLLER_SYNC].desiredPeriod =
               clamp(kNominalPeriod - kMaxPeriodAdjustment,
                     kNominalPeriod + kMaxPeriodAdjustment,
-                    kNominalPeriod - normalizedCycleDelta / 5);
+                    kNominalPeriod - normalizedCycleDelta / 20);
 	}
 
 	// We print out (utime, our detla, peer delta negated) as that's a convenient tuple for graphing.
