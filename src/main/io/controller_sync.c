@@ -12,12 +12,16 @@
 #include "io/debug_console.h"
 #include "io/fletcher.h"
 
-// If payload is modified, make sure to change kExpectedTransmissionTime
 typedef struct {
   uint32_t utime;
-  int32_t clock_diff;
+  int32_t clockDiff;
+  int32_t cycleStartDelta;
 } payload_t;
 
+const int nodeIndex = 1;
+
+#define kNominalPeriod 10000
+#define kMaxPeriodAdjustment 50
 
 int sync_bytes_written = 0;
 int sync_bytes_read = 0;
@@ -60,6 +64,13 @@ int32_t ourSendReceiveTimeDiff = 0;
 
 // Difference in utime from one callback to the next on our side (uses no data from our peer).
 int32_t callbackInterval = 0;
+
+// Difference between when we sent a packet and when we estimate our peer sent a packet.
+int32_t cycleStartDelta = 0;
+
+inline int32_t clamp(int32_t min_value, int32_t max_value, int32_t value) {
+  return value < min_value ? min_value : value > max_value ? max_value : value;
+}
 
 void controllerSyncInit() {
   debugPrint("opening port\r\n");
@@ -235,7 +246,7 @@ void processAvailableData() {
 	// TODO: need to verify that frameRxUtime corresponds to the correct frame (it could point to
 	// a newer frame if our task has been starved for a while)
 	ourSendReceiveTimeDiff = (int32_t)(frameRxUtime - payload->utime);
-	int32_t theirSendReceiveTimeDiff = payload->clock_diff;
+	int32_t theirSendReceiveTimeDiff = payload->clockDiff;
 
 	int32_t estimatedTransmissionTime = (ourSendReceiveTimeDiff + theirSendReceiveTimeDiff) / 2;
 
@@ -244,21 +255,24 @@ void processAvailableData() {
 
 	uint32_t peerTxUtime = payload->utime + estimatedClockDelta;
 
-	// TODO: This needs to be modded to the range (-50k, +50k) (i.e. +/- 0.5 of the cycle period)
-	int32_t cycleStartDiff = frameTxUtime - peerTxUtime;
+	cycleStartDelta = frameTxUtime - peerTxUtime;
 
-	int32_t normalizedCycleDelta = normalizeCycleDelta(cycleStartDiff);
-	// TODO: right now this always goes faster or slower; when we're close we should only make small adjustments.
-	// TODO: have a param and only do this on the slave side
-	if (normalizedCycleDelta > 0) {
-	  cfTasks[TASK_CONTROLLER_SYNC].desiredPeriod = 9900;
-	} else {
-	  cfTasks[TASK_CONTROLLER_SYNC].desiredPeriod = 10100;
+	// master is node 0 and does not adjust its timing.  slaves have higher indexes and adjust
+	// their clocks to sync with master.
+	if (nodeIndex > 0) {
+	  int32_t normalizedCycleDelta = normalizeCycleDelta(cycleStartDelta);
+	  // TODO: right now this always goes faster or slower; when we're close we should only make small adjustments.
+
+	  // We adjust by cycle delta / 5 to avoid making large changes.
+          cfTasks[TASK_CONTROLLER_SYNC].desiredPeriod =
+              clamp(kNominalPeriod - kMaxPeriodAdjustment,
+                    kNominalPeriod + kMaxPeriodAdjustment,
+                    kNominalPeriod - normalizedCycleDelta / 5);
 	}
 
 	// We print out (utime, our detla, peer delta negated) as that's a convenient tuple for graphing.
 	debugPrint("clockDeltaData ");
-	debugPrintu(payload->utime);
+	debugPrintu(frameRxUtime);
 	debugPrint(",");
 	debugPrinti(estimatedClockDelta);
 	debugPrint(",");
@@ -266,9 +280,9 @@ void processAvailableData() {
 	debugPrint(",");
 	debugPrinti(estimatedTransmissionTime);
 	debugPrint(",");
-	debugPrinti(cycleStartDiff);
+	debugPrinti(cycleStartDelta);
 	debugPrint(",");
-	debugPrinti(callbackInterval);
+	debugPrinti(payload->cycleStartDelta);
 	debugPrint("\r\n");
       } else {
 	if (requestedResyncBytes <= 0 && gapStart <= 0) {
@@ -356,11 +370,12 @@ void controllerSyncUpdate() {
     payload_t payload;
     payload.utime = micros();
     frameTxUtime = payload.utime;
-    payload.clock_diff = ourSendReceiveTimeDiff;
+    payload.clockDiff = ourSendReceiveTimeDiff;
+    payload.cycleStartDelta = cycleStartDelta;
     sendFrame(csyncPort, &payload);
     framesSentCount++;
 
-    delayMicroseconds(1500);
+    delayMicroseconds(2000);
 
     processAvailableData();
   }

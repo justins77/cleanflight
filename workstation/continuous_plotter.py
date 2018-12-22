@@ -90,8 +90,8 @@ class CsyncContinuousPlotter(ContinuousPlotter):
             #self.append('ours', publish_time, int(match.group(2)))
             #self.append('theirs', publish_time, int(match.group(3)))
             #self.append('tx_time', publish_time, int(match.group(4)))
-            self.append('cycle_start_diff', publish_time, int(match.group(5)))
-            self.append('our_callback_interval', publish_time, int(match.group(6)))
+            self.append('cycle_start_delta', publish_time, int(match.group(5)))
+            self.append('peer_cycle_start_delta', publish_time, int(match.group(6)))
 
 
 # For testing only
