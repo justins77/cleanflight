@@ -84,14 +84,21 @@ class CsyncContinuousPlotter(ContinuousPlotter):
             self.process_line(line.strip())
 
     def process_line(self, line):
-        match = re.match(r'clockDeltaData ([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+)$', line)
+        match = re.match(r'clockDeltaData ([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+),([0-9\-]+)$', line)
         if match:
             publish_time = float(match.group(1)) / 1e6
             #self.append('ours', publish_time, int(match.group(2)))
             #self.append('theirs', publish_time, int(match.group(3)))
             #self.append('tx_time', publish_time, int(match.group(4)))
+            peer_cycle_start_delta = int(match.group(6));
+            # Throw out garbage data
+            if abs(peer_cycle_start_delta) > 1e6 or peer_cycle_start_delta == 0:
+                return
             self.append('cycle_start_delta', publish_time, int(match.group(5)))
-            self.append('peer_cycle_start_delta', publish_time, int(match.group(6)))
+            self.append('peer_cycle_start_delta', publish_time, peer_cycle_start_delta)
+            #self.append('scheduler_jitter', publish_time, int(match.group(7)))
+            self.append('max', publish_time, 1000)
+            self.append('min', publish_time, -1000)
 
 
 # For testing only

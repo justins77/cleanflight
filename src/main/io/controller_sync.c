@@ -20,8 +20,8 @@ typedef struct {
 
 const int nodeIndex = 1;
 
-#define kNominalPeriod 10000
-#define kMaxPeriodAdjustment 50
+#define kNominalPeriod 100000
+#define kMaxPeriodAdjustment 500
 
 int sync_bytes_written = 0;
 int sync_bytes_read = 0;
@@ -67,6 +67,8 @@ int32_t callbackInterval = 0;
 
 // Difference between when we sent a packet and when we estimate our peer sent a packet.
 int32_t cycleStartDelta = 0;
+
+int32_t schedulerJitter = 0;
 
 inline int32_t clamp(int32_t min_value, int32_t max_value, int32_t value) {
   return value < min_value ? min_value : value > max_value ? max_value : value;
@@ -261,16 +263,16 @@ void processAvailableData() {
 	// their clocks to sync with master.
 	if (nodeIndex > 0) {
 	  int32_t normalizedCycleDelta = normalizeCycleDelta(cycleStartDelta);
-	  // TODO: right now this always goes faster or slower; when we're close we should only make small adjustments.
 
-	  // We adjust by cycle delta divided by a scaling factor to avoid overcorrection
+	  // We adjust by cycle delta divided by a scaling factor to avoid overcorrection, and we
+	  // clamp to within a max adjustment.
           cfTasks[TASK_CONTROLLER_SYNC].desiredPeriod =
-              clamp(kNominalPeriod - kMaxPeriodAdjustment,
-                    kNominalPeriod + kMaxPeriodAdjustment,
-                    kNominalPeriod - normalizedCycleDelta / 20);
-	}
+              kNominalPeriod + clamp(-kMaxPeriodAdjustment,
+                                     kMaxPeriodAdjustment,
+                                     -normalizedCycleDelta / 5);
+        }
 
-	// We print out (utime, our detla, peer delta negated) as that's a convenient tuple for graphing.
+        // We print out (utime, our detla, peer delta negated) as that's a convenient tuple for graphing.
 	debugPrint("clockDeltaData ");
 	debugPrintu(frameRxUtime);
 	debugPrint(",");
@@ -283,6 +285,8 @@ void processAvailableData() {
 	debugPrinti(cycleStartDelta);
 	debugPrint(",");
 	debugPrinti(payload->cycleStartDelta);
+	debugPrint(",");
+	debugPrinti(schedulerJitter);
 	debugPrint("\r\n");
       } else {
 	if (requestedResyncBytes <= 0 && gapStart <= 0) {
@@ -354,7 +358,8 @@ void controllerSyncUpdate() {
   uint32_t utime = micros();
   if (last_callback != 0) {
     callbackInterval = utime - last_callback;
-    if (callbackInterval > 15000) {
+    schedulerJitter = callbackInterval - kNominalPeriod;
+    if (callbackInterval > 150000) {
       debugPrintVar("LONG GAP: ", callbackInterval);
     }
     if (callbackInterval > longest_gap) {
@@ -363,9 +368,9 @@ void controllerSyncUpdate() {
   }
   last_callback = utime;
 
-  static int ds2 = 0;
-  if (++ds2 >= 10) {
-    ds2 = 0;
+  //static int ds2 = 0;
+  //if (++ds2 >= 10) {
+  //  ds2 = 0;
 
     payload_t payload;
     payload.utime = micros();
@@ -378,7 +383,7 @@ void controllerSyncUpdate() {
     delayMicroseconds(2000);
 
     processAvailableData();
-  }
+    //}
 
   static int downsample = 0;
   if (++downsample >= 100) {
