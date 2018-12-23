@@ -15,7 +15,7 @@ class Series(object):
         self.ys = []
 
 
-MAX_HISTORY = 100
+MAX_HISTORY = 300
 
 class ContinuousPlotter(object):
     def __init__(self):

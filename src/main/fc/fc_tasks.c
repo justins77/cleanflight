@@ -496,7 +496,7 @@ cfTask_t cfTasks[TASK_COUNT] = {
     [TASK_CONTROLLER_SYNC] = {
       .taskName = "CONTROLLER_SYNC",
       .taskFunc = controllerSyncUpdate,
-      .desiredPeriod = TASK_PERIOD_HZ(10),
+      .desiredPeriod = TASK_PERIOD_HZ(100),
       .staticPriority = TASK_PRIORITY_REALTIME,
     },
 

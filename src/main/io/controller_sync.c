@@ -20,8 +20,8 @@ typedef struct {
 
 const int nodeIndex = 1;
 
-#define kNominalPeriod 100000
-#define kMaxPeriodAdjustment 500
+#define kNominalPeriod 10000
+#define kMaxPeriodAdjustment 50
 
 int sync_bytes_written = 0;
 int sync_bytes_read = 0;
@@ -209,11 +209,11 @@ bool isValidFrame(uint8_t* frameBuffer) {
 extern cfTask_t cfTasks[];
 
 int32_t normalizeCycleDelta(int32_t delta) {
-  if (delta > 50000) {
-    return delta - 100000;
+  if (delta > kNominalPeriod / 2) {
+    return delta - kNominalPeriod;
   }
-  if (delta < -50000) {
-    return delta + 100000;
+  if (delta < -kNominalPeriod / 2) {
+    return delta + kNominalPeriod;
   }
   return delta;
 }
@@ -272,22 +272,26 @@ void processAvailableData() {
                                      -normalizedCycleDelta / 5);
         }
 
-        // We print out (utime, our detla, peer delta negated) as that's a convenient tuple for graphing.
-	debugPrint("clockDeltaData ");
-	debugPrintu(frameRxUtime);
-	debugPrint(",");
-	debugPrinti(estimatedClockDelta);
-	debugPrint(",");
-	debugPrinti(-theirEstimatedClockDelta);
-	debugPrint(",");
-	debugPrinti(estimatedTransmissionTime);
-	debugPrint(",");
-	debugPrinti(cycleStartDelta);
-	debugPrint(",");
-	debugPrinti(payload->cycleStartDelta);
-	debugPrint(",");
-	debugPrinti(schedulerJitter);
-	debugPrint("\r\n");
+	static int ds = 0;
+	if (++ds >= 2) {
+	  ds = 0;
+	  // We print out (utime, our detla, peer delta negated) as that's a convenient tuple for graphing.
+	  debugPrint("clockDeltaData ");
+	  debugPrintu(frameRxUtime);
+	  debugPrint(",");
+	  debugPrinti(estimatedClockDelta);
+	  debugPrint(",");
+	  debugPrinti(-theirEstimatedClockDelta);
+	  debugPrint(",");
+	  debugPrinti(estimatedTransmissionTime);
+	  debugPrint(",");
+	  debugPrinti(cycleStartDelta);
+	  debugPrint(",");
+	  debugPrinti(payload->cycleStartDelta);
+	  debugPrint(",");
+	  debugPrinti(schedulerJitter);
+	  debugPrint("\r\n");
+	}
       } else {
 	if (requestedResyncBytes <= 0 && gapStart <= 0) {
 	  requestedResyncBytes = frameOffset;
