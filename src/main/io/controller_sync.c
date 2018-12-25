@@ -56,7 +56,7 @@ volatile int requestedResyncBytes = -1;
 volatile uint8_t buffer[256];
 
 uint32_t frameTxUtime = 0;
-volatile uint32_t frameRxUtime = 0;
+volatile uint32_t frameRxUtimes[kNumFrames] = {0, 0, 0};
 
 // Our receive utime minus peer send utime.  We are ahead of peer if this is positive, or
 // behind if this is negative.
@@ -110,7 +110,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     return;
   }
 
-  frameRxUtime = micros();
+  frameRxUtimes[currentReadFrame] = micros();
 
   /*
   debugPrint("----------------------------------------- buffer: ");
@@ -242,11 +242,13 @@ void processAvailableData() {
       //   if not, request a resync
       int frameOffset = tail % kFrameSize;
       if (frameOffset == 0) {
-	//uint32_t dt = frameRxUtime - payload->utime;
-	//debugPrintVar("time in flight: ", dt);
+	// It's important to make sure we have the RX utime from the correct frame.  Before
+	// implementing the array of RX utimes, there was a case where when we are slowing
+	// our cycle, at the time when we wrap-around we can receive two frames in one cycle,
+	// and this would cause a bad misestimation of transfer time.
+	int frameIndex = (tail / kFrameSize + kNumFrames - 1) % kNumFrames;
 
-	// TODO: need to verify that frameRxUtime corresponds to the correct frame (it could point to
-	// a newer frame if our task has been starved for a while)
+	uint32_t frameRxUtime = frameRxUtimes[frameIndex];
 	ourSendReceiveTimeDiff = (int32_t)(frameRxUtime - payload->utime);
 	int32_t theirSendReceiveTimeDiff = payload->clockDiff;
 
