@@ -63,7 +63,7 @@ volatile uint32_t frameRxUtimes[kNumFrames] = {0, 0, 0};
 int32_t ourSendReceiveTimeDiff = 0;
 
 // Difference in utime from one callback to the next on our side (uses no data from our peer).
-int32_t callbackInterval = 0;
+uint32_t callbackInterval = 0;
 
 // Difference between when we sent a packet and when we estimate our peer sent a packet.
 int32_t cycleStartDelta = 0;
@@ -220,7 +220,7 @@ int32_t normalizeCycleDelta(int32_t delta) {
 
 void processAvailableData() {
   static uint8_t frameBuffer[kFrameSize];
-  static int bufferPos = 0;
+  static size_t bufferPos = 0;
 
   while (true) {
     while (bufferPos < kFrameSize && areBytesAvailable()) {
@@ -307,10 +307,10 @@ void processAvailableData() {
 
     // Find the next start byte in the buffered data
     int nextStartCandidate = -1;
-    for (int i=1; i<kFrameSize; i++) {
+    for (size_t i = 1; i < kFrameSize; i++) {
       if (frameBuffer[i] == kStartByte) {
-	nextStartCandidate = i;
-	break;
+        nextStartCandidate = i;
+        break;
       }
     }
 
@@ -345,7 +345,7 @@ void unreliableWrite(serialPort_t *instance, uint8_t ch) {
 void sendFrame(serialPort_t* instance, payload_t* payload) {
   serialWrite(instance, kStartByte);
   uint8_t* payload_data = (uint8_t*)payload;
-  for (int i=0; i<sizeof(payload_t); i++) {
+  for (size_t i = 0; i < sizeof(payload_t); i++) {
     serialWrite(instance, payload_data[i]);
   }
   uint16_t checksum = compute_fletcher16(payload_data, sizeof(payload_t));
