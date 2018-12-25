@@ -147,6 +147,7 @@ FC_SRC = \
             io/rcdevice.c \
             io/gps.c \
             io/controller_sync.c \
+            io/controller_sync_experiment.cc \
             io/debug_console.c \
             io/fletcher.c \
             io/ledstrip.c \

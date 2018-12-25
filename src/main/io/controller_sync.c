@@ -354,6 +354,9 @@ void sendFrame(serialPort_t* instance, payload_t* payload) {
 static uint32_t last_callback = 0;
 static uint32_t longest_gap;
 
+// TEMPORARY - declaration of the C-callable shim into C++
+void controllerSyncCppShim();
+
 void controllerSyncUpdate() {
   if (!csyncPort) {
     return;
@@ -403,5 +406,6 @@ void controllerSyncUpdate() {
     debugPrint(" longest gap: ");
     debugPrinti(longest_gap);
     debugPrint("\r\n");
+    controllerSyncCppShim();
   }
 }

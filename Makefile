@@ -223,6 +223,28 @@ CFLAGS     += $(ARCH_FLAGS) \
               -MMD -MP \
               $(EXTRA_FLAGS)
 
+# TODO: pull out common flags to a single C and C++ section
+CXXFLAGS   += $(ARCH_FLAGS) \
+              $(addprefix -D,$(OPTIONS)) \
+              $(addprefix -I,$(INCLUDE_DIRS)) \
+              $(DEBUG_FLAGS) \
+              -std=c++11 \
+              -Wall -Wextra -Wunsafe-loop-optimizations -Wdouble-promotion \
+              -ffunction-sections \
+              -fdata-sections \
+              -pedantic \
+              $(DEVICE_FLAGS) \
+              -D_GNU_SOURCE \
+              -DUSE_STDPERIPH_DRIVER \
+              -D$(TARGET) \
+              $(TARGET_FLAGS) \
+              -D'__FORKNAME__="$(FORKNAME)"' \
+              -D'__TARGET__="$(TARGET)"' \
+              -D'__REVISION__="$(REVISION)"' \
+              -save-temps=obj \
+              -MMD -MP \
+              $(EXTRA_FLAGS)
+
 ASFLAGS     = $(ARCH_FLAGS) \
               -x assembler-with-cpp \
               $(addprefix -I,$(INCLUDE_DIRS)) \
@@ -294,7 +316,7 @@ $(TARGET_ELF):  $(TARGET_OBJS)
 ifeq ($(TARGET_MCU),STM32F1)
 	@echo "Notice: STM32F1 based targets will be unsupported soon."
 endif
-	$(V1) $(CROSS_CC) -o $@ $^ $(LD_FLAGS)
+	$(V1) $(CROSS_CXX) -o $@ $^ $(LD_FLAGS)
 	$(V1) $(SIZE) $(TARGET_ELF)
 
 # Compile
@@ -315,6 +337,13 @@ $(OBJECT_DIR)/$(TARGET)/%.o: %.c
 	echo "%% $<" "$(STDOUT)" && \
 	$(CROSS_CC) -c -o $@ $(CFLAGS) $(CC_DEFAULT_OPTIMISATION) $<))
 endif
+
+# C++ compile
+# For now, always use speed optimization with C++ source
+$(OBJECT_DIR)/$(TARGET)/%.o: %.cc
+	$(V1) mkdir -p $(dir $@)
+	echo "%% $<" "$(STDOUT)"
+	$(CROSS_CXX) -c -o $@ $(CXXFLAGS) $(CC_SPEED_OPTIMISATION) $<
 
 # Assemble
 $(OBJECT_DIR)/$(TARGET)/%.o: %.s
@@ -509,4 +538,3 @@ $(TARGET_OBJS) : Makefile
 
 # include auto-generated dependencies
 -include $(TARGET_DEPS)
-

@@ -23,7 +23,7 @@ int getNextDebugChar() {
   return ch;
 }
 
-void debugPrint(char* s) {
+void debugPrint(const char* s) {
   while ((*s) != '\0') {
     addDebugChar(*s);
     s++;
@@ -58,13 +58,13 @@ void debugPrintx(uint8_t x) {
   debugPrintc(hex_chars[x & 0xF]);
 }
 
-void debugPrintVar(char* s, int x) {
+void debugPrintVar(const char* s, int x) {
   debugPrint(s);
   debugPrinti(x);
   debugPrint("\r\n");
 }
 
-void debugPrintVarib(char* s, int x) {
+void debugPrintVarib(const char* s, int x) {
   debugPrint(s);
   debugPrintib(x);
   debugPrint("\r\n");
